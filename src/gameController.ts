@@ -646,11 +646,14 @@ export function createGameController(elements: GameControllerElements) {
     const dragRect = elements.dragCanvas.getBoundingClientRect();
     const tipWidth = elements.tooltipEl.offsetWidth;
     const tipHeight = elements.tooltipEl.offsetHeight;
-    const left = dragRect.left + dragRect.width / 2;
-    let top = dragRect.top - 10;
-    const below = dragRect.top < tipHeight + 20;
+    const pointerX = dragPointer?.x ?? dragRect.left + dragRect.width / 2;
+    const pointerY = dragPointer?.y ?? dragRect.top;
+    const lift = getDragLift();
+    const left = pointerX;
+    let top = pointerY - lift - tipHeight - 10;
+    const below = top < 12;
     if (below) {
-      top = dragRect.bottom + 10;
+      top = pointerY - lift + 10;
     }
     elements.tooltipEl.classList.toggle('below', below);
     elements.tooltipEl.style.left = `${Math.max(12 + tipWidth / 2, Math.min(window.innerWidth - 12 - tipWidth / 2, left))}px`;

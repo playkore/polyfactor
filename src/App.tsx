@@ -94,54 +94,56 @@ export default function App() {
   }, []);
 
   return (
-    <main className="game" ref={rootRef}>
-      <section className="board-wrap">
-        <div className="tooltip" ref={tooltipRef} data-testid="tooltip" />
-        <canvas
-          ref={boardRef}
-          width={640}
-          height={640}
-          aria-label="8 by 8 game board"
-          data-testid="board-canvas"
-        />
-      </section>
+    <>
+      <main className="game" ref={rootRef}>
+        <section className="board-wrap">
+          <canvas
+            ref={boardRef}
+            width={640}
+            height={640}
+            aria-label="8 by 8 game board"
+            data-testid="board-canvas"
+          />
+        </section>
 
-      <aside className="side">
-        <h1>Tetramino<br />Multiplier</h1>
+        <aside className="side">
+          <h1>Tetramino<br />Multiplier</h1>
 
-        <div className="actions">
-          <button ref={newRef} data-testid="new-game-button">New game</button>
-        </div>
-
-        <div className="stats">
-          <div className="stat">
-            <b>Score</b>
-            <span ref={scoreRef} data-testid="score">0</span>
-          </div>
-          <div className="stat">
-            <b>Moves</b>
-            <span ref={movesRef} data-testid="moves">0</span>
-          </div>
-        </div>
-
-        <div className="top-panels">
-          <div className="next-box">
-            <div className="next-title">Current tetramino</div>
-            <canvas ref={nextRef} width={200} height={200} data-testid="next-canvas" />
+          <div className="actions">
+            <button ref={newRef} data-testid="new-game-button">New game</button>
           </div>
 
-          <div className="store-box">
-            <div className="store-title">Store</div>
-            <div className="store-item">
-              <button ref={rerollRef} data-testid="reroll-button">Reroll -10</button>
+          <div className="stats">
+            <div className="stat">
+              <b>Score</b>
+              <span ref={scoreRef} data-testid="score">0</span>
             </div>
-            <div className="store-item">
-              <button ref={clearRef} data-testid="clear-board-button">Clear board -100</button>
+            <div className="stat">
+              <b>Moves</b>
+              <span ref={movesRef} data-testid="moves">0</span>
             </div>
           </div>
-        </div>
-      </aside>
 
+          <div className="top-panels">
+            <div className="next-box">
+              <div className="next-title">Current tetramino</div>
+              <canvas ref={nextRef} width={200} height={200} data-testid="next-canvas" />
+            </div>
+
+            <div className="store-box">
+              <div className="store-title">Store</div>
+              <div className="store-item">
+                <button ref={rerollRef} data-testid="reroll-button">Reroll -10</button>
+              </div>
+              <div className="store-item">
+                <button ref={clearRef} data-testid="clear-board-button">Clear board -100</button>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </main>
+
+      <div className="tooltip" ref={tooltipRef} data-testid="tooltip" />
       <div className="overlay" ref={overlayRef} data-testid="game-over-overlay">
         <div className="modal">
           <h2>Game over</h2>
@@ -149,9 +151,8 @@ export default function App() {
           <button ref={againRef} data-testid="play-again-button">Play again</button>
         </div>
       </div>
-
       <canvas ref={dragRef} aria-hidden="true" id="dragCanvas" data-testid="drag-canvas" />
       <canvas ref={fxRef} aria-hidden="true" id="fxCanvas" data-testid="fx-canvas" />
-    </main>
+    </>
   );
 }

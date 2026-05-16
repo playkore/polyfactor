@@ -40,6 +40,7 @@
       grid-template-columns: 1fr;
       gap: 12px;
       align-items: start;
+      will-change: transform;
     }
 
     .board-wrap, .side {
@@ -78,6 +79,14 @@
       display: none;
     }
 
+    #fxCanvas {
+      position: fixed;
+      inset: 0;
+      background: transparent;
+      pointer-events: none;
+      z-index: 15;
+    }
+
     .tooltip {
       position: fixed;
       left: 0;
@@ -93,7 +102,7 @@
       letter-spacing: 0.01em;
       display: none;
       white-space: nowrap;
-      z-index: 5;
+      z-index: 30;
     }
 
     .tooltip.show {
@@ -106,7 +115,7 @@
     }
 
     .tooltip.below {
-      transform: translate(-50%, 10px);
+      transform: translate(-50%, 0);
     }
 
     .side {
@@ -207,7 +216,7 @@
       display: grid;
       gap: 10px;
       grid-column: 1 / -1;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 1fr;
     }
 
     button {
@@ -283,6 +292,10 @@
     <aside class="side">
       <h1>Tetramino<br>Multiplier</h1>
 
+      <div class="actions">
+        <button id="newBtn">New game</button>
+      </div>
+
       <div class="stats">
         <div class="stat"><b>Score</b><span id="score">0</span></div>
         <div class="stat"><b>Moves</b><span id="moves">0</span></div>
@@ -305,11 +318,6 @@
         </div>
       </div>
 
-      <div class="actions">
-        <button id="rotateBtn">Rotate</button>
-        <button id="newBtn">New game</button>
-      </div>
-
     </aside>
   </main>
 
@@ -322,6 +330,7 @@
   </div>
 
   <canvas id="dragCanvas" aria-hidden="true"></canvas>
+  <canvas id="fxCanvas" aria-hidden="true"></canvas>
 
 <script>
 (() => {
@@ -329,10 +338,13 @@
   const boardCanvas = document.getElementById('board');
   const nextCanvas = document.getElementById('nextCanvas');
   const dragCanvas = document.getElementById('dragCanvas');
+  const fxCanvas = document.getElementById('fxCanvas');
   const ctx = boardCanvas.getContext('2d');
   const nctx = nextCanvas.getContext('2d');
   const dctx = dragCanvas.getContext('2d');
+  const fctx = fxCanvas.getContext('2d');
 
+  const gameEl = document.querySelector('.game');
   const scoreEl = document.getElementById('score');
   const movesEl = document.getElementById('moves');
   const rerollBtn = document.getElementById('rerollBtn');
@@ -378,6 +390,13 @@
   let activePointerId = null;
   let dragPointer = null;
   let dragAnchor = { col: 0, row: 0 };
+  let fxParticles = [];
+  let scoreFlares = [];
+  let pieceReveal = null;
+  let shakeEffect = null;
+  let fxRunning = false;
+  let fxLastTime = 0;
+  let currentShake = { x: 0, y: 0 };
 
   function weightedPick(items) {
     const r = Math.random();
@@ -395,36 +414,6 @@
     return cells
       .map(([x, y]) => [x - minX, y - minY])
       .sort((a, b) => (a[1] - b[1]) || (a[0] - b[0]));
-  }
-
-  function rotatePieceState(piece, anchor = null) {
-    const rotated = piece.cells.map(([x, y], i) => ({
-      cell: [y, -x],
-      value: piece.values[i],
-    }));
-
-    const minX = Math.min(...rotated.map(p => p.cell[0]));
-    const minY = Math.min(...rotated.map(p => p.cell[1]));
-    const normalized = rotated
-      .map(({ cell, value }) => ({
-        cell: [cell[0] - minX, cell[1] - minY],
-        value,
-      }))
-      .sort((a, b) => (a.cell[1] - b.cell[1]) || (a.cell[0] - b.cell[0]));
-
-    let rotatedAnchor = null;
-    if (anchor) {
-      rotatedAnchor = {
-        col: anchor.row - minX,
-        row: -anchor.col - minY,
-      };
-    }
-
-    return {
-      cells: normalized.map(p => p.cell),
-      values: normalized.map(p => p.value),
-      anchor: rotatedAnchor,
-    };
   }
 
   function makePiece() {
@@ -447,18 +436,21 @@
     hover = null;
     gameOver = false;
     overlay.classList.remove('show');
+    triggerPieceReveal(1.2);
     updateStats();
     resizeCanvases();
     checkGameOver();
+    draw();
   }
 
-  function setCurrentPiece(nextPiece) {
+  function setCurrentPiece(nextPiece, revealStrength = 1) {
     piece = nextPiece;
     dragging = false;
     dragPointer = null;
     dragAnchor = { col: 0, row: 0 };
     hover = null;
     dragCell = null;
+    triggerPieceReveal(revealStrength);
   }
 
   function regenerateBoard() {
@@ -500,6 +492,280 @@
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     return false;
+  }
+
+  function resizeFxCanvas() {
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const width = Math.max(1, Math.floor(window.innerWidth * dpr));
+    const height = Math.max(1, Math.floor(window.innerHeight * dpr));
+    if (fxCanvas.width !== width || fxCanvas.height !== height) {
+      fxCanvas.width = width;
+      fxCanvas.height = height;
+    }
+    fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return false;
+  }
+
+  function ensureFxLoop() {
+    if (fxRunning) return;
+    fxRunning = true;
+    fxLastTime = performance.now();
+    requestAnimationFrame(stepFx);
+  }
+
+  function addParticles(items) {
+    if (!items.length) return;
+    fxParticles.push(...items);
+    ensureFxLoop();
+  }
+
+  function spawnBurst({ x, y, count = 16, speed = 260, color = '#f4cf6b', size = 6, spread = 1 }) {
+    const items = [];
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.45;
+      const velocity = speed * (0.55 + Math.random() * 0.7);
+      items.push({
+        kind: 'burst',
+        x,
+        y,
+        vx: Math.cos(angle) * velocity,
+        vy: Math.sin(angle) * velocity - 90,
+        life: 0,
+        ttl: 420 + Math.random() * 240,
+        color,
+        size: size * (0.7 + Math.random() * 0.7),
+        drift: (Math.random() - 0.5) * spread,
+      });
+    }
+    addParticles(items);
+  }
+
+  function spawnFlyToScore({ x, y, value, color = '#fff1d9' }) {
+    const target = scoreEl.getBoundingClientRect();
+    const tx = target.left + target.width / 2;
+    const ty = target.top + target.height / 2;
+    addParticles([
+      {
+        kind: 'fly',
+        x,
+        y,
+        tx,
+        ty,
+        life: 0,
+        ttl: 720,
+        color,
+        text: `+${value}`,
+        wobble: Math.random() * Math.PI * 2,
+      },
+    ]);
+  }
+
+  function spawnScoreTrail(cells, total) {
+    if (!cells.length) return;
+    const target = scoreEl.getBoundingClientRect();
+    const tx = target.left + target.width / 2;
+    const ty = target.top + target.height / 2;
+    const items = [];
+    let centerX = 0;
+    let centerY = 0;
+    for (const cell of cells) {
+      const color = (VALUE_STYLES[cell.base] || VALUE_STYLES[0]).fg;
+      const cellRect = boardCanvas.getBoundingClientRect();
+      const s = cellRect.width / SIZE;
+      const x = cellRect.left + (cell.col + 0.5) * s;
+      const y = cellRect.top + (cell.row + 0.5) * s;
+      centerX += x;
+      centerY += y;
+      items.push({
+        kind: 'spark',
+        x,
+        y,
+        tx,
+        ty,
+        life: 0,
+        ttl: 580 + Math.random() * 260,
+        color,
+        size: 4 + Math.random() * 4,
+        drift: (Math.random() - 0.5) * 140,
+      });
+    }
+    addParticles(items);
+    centerX /= cells.length;
+    centerY /= cells.length;
+    spawnFlyToScore({
+      x: centerX,
+      y: centerY,
+      value: total,
+      color: '#fff8df',
+    });
+  }
+
+  function spawnBoardClearParticles(occupiedCells) {
+    const rect = boardCanvas.getBoundingClientRect();
+    const s = rect.width / SIZE;
+    const items = [];
+    for (const cell of occupiedCells) {
+      const cx = rect.left + (cell.col + 0.5) * s;
+      const cy = rect.top + (cell.row + 0.5) * s;
+      const style = VALUE_STYLES[cell.base] || VALUE_STYLES[0];
+      for (let i = 0; i < 4; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 120 + Math.random() * 260;
+        items.push({
+          kind: 'burst',
+          x: cx,
+          y: cy,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 40,
+          life: 0,
+          ttl: 380 + Math.random() * 240,
+          color: style.fg,
+          size: 4 + Math.random() * 4,
+          drift: (Math.random() - 0.5) * 60,
+        });
+      }
+    }
+    addParticles(items);
+  }
+
+  function spawnPreviewBurst(sourceCanvas, cells, strength = 1) {
+    const rect = sourceCanvas.getBoundingClientRect();
+    const maxX = Math.max(...cells.map(c => c[0]));
+    const maxY = Math.max(...cells.map(c => c[1]));
+    const block = Math.max(24, Math.min(52, Math.floor(Math.min(rect.width, rect.height) / 10)));
+    const ox = Math.floor((rect.width - (maxX + 1) * block) / 2);
+    const oy = Math.floor((rect.height - (maxY + 1) * block) / 2);
+    const items = [];
+    for (const [x, y] of cells) {
+      const cx = rect.left + ox + x * block + block / 2;
+      const cy = rect.top + oy + y * block + block / 2;
+      items.push({
+        kind: 'burst',
+        x: cx,
+        y: cy,
+        vx: (Math.random() - 0.5) * 260 * strength,
+        vy: (Math.random() - 0.75) * 280 * strength,
+        life: 0,
+        ttl: 420 + Math.random() * 260,
+        color: '#fff1d9',
+        size: 5 + Math.random() * 5,
+        drift: (Math.random() - 0.5) * 90,
+      });
+    }
+    addParticles(items);
+  }
+
+  function shakeScreen(power = 10, duration = 260) {
+    shakeEffect = {
+      power,
+      start: performance.now(),
+      end: performance.now() + duration,
+    };
+    ensureFxLoop();
+  }
+
+  function triggerPieceReveal(strength = 1) {
+    pieceReveal = {
+      start: performance.now(),
+      duration: 280 + 80 * strength,
+      strength,
+    };
+    ensureFxLoop();
+  }
+
+  function stepFx(now) {
+    const dt = Math.min(40, now - fxLastTime);
+    fxLastTime = now;
+    resizeFxCanvas();
+
+    let alive = false;
+    let shakeX = 0;
+    let shakeY = 0;
+
+    if (shakeEffect) {
+      const t = (now - shakeEffect.start) / (shakeEffect.end - shakeEffect.start);
+      if (t >= 1) {
+        shakeEffect = null;
+      } else {
+        const falloff = 1 - t;
+        const amp = shakeEffect.power * falloff;
+        shakeX = (Math.random() - 0.5) * amp;
+        shakeY = (Math.random() - 0.5) * amp;
+        alive = true;
+      }
+    }
+
+    currentShake = { x: shakeX, y: shakeY };
+    gameEl.style.transform = `translate(${shakeX}px, ${shakeY}px)`;
+
+    if (pieceReveal && now - pieceReveal.start < pieceReveal.duration) {
+      alive = true;
+      draw(now);
+    } else if (pieceReveal) {
+      pieceReveal = null;
+      draw(now);
+    }
+
+    fctx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+    if (fxParticles.length) {
+      const nextParticles = [];
+      for (const p of fxParticles) {
+        p.life += dt;
+        const t = Math.min(1, p.life / p.ttl);
+        if (t >= 1) continue;
+        alive = true;
+        const ease = 1 - Math.pow(1 - t, 3);
+        const x = p.x + p.vx * (p.life / 1000) + Math.sin(t * Math.PI * 2) * (p.drift || 0) * (1 - t);
+        const y = p.y + p.vy * (p.life / 1000) + 260 * t * t;
+        const alpha = 1 - t;
+        fctx.save();
+        fctx.globalAlpha = alpha;
+        if (p.kind === 'fly') {
+          const fx = p.x + (p.tx - p.x) * ease + Math.sin((t + 0.12) * Math.PI * 3) * 16;
+          const fy = p.y + (p.ty - p.y) * ease - Math.sin(t * Math.PI) * 48;
+          const cx = Math.max(12, Math.min(window.innerWidth - 12, fx));
+          const cy = Math.max(12, Math.min(window.innerHeight - 12, fy));
+          fctx.fillStyle = p.color;
+          fctx.strokeStyle = '#101412';
+          fctx.lineWidth = 2;
+          fctx.font = '800 18px ui-monospace, monospace';
+          fctx.textAlign = 'center';
+          fctx.textBaseline = 'middle';
+          fctx.translate(cx, cy);
+          fctx.rotate(Math.sin(t * Math.PI * 2) * 0.12);
+          fctx.fillText(p.text, 0, 0);
+          fctx.strokeText(p.text, 0, 0);
+        } else if (p.kind === 'spark') {
+          const fx = p.x + (p.tx - p.x) * ease + Math.sin(t * Math.PI * 4) * 8;
+          const fy = p.y + (p.ty - p.y) * ease - Math.sin(t * Math.PI) * 34;
+          const cx = Math.max(10, Math.min(window.innerWidth - 10, fx));
+          const cy = Math.max(10, Math.min(window.innerHeight - 10, fy));
+          fctx.fillStyle = p.color;
+          fctx.beginPath();
+          fctx.arc(cx, cy, p.size * (1 - t * 0.2), 0, Math.PI * 2);
+          fctx.fill();
+        } else {
+          const cx = Math.max(10, Math.min(window.innerWidth - 10, x));
+          const cy = Math.max(10, Math.min(window.innerHeight - 10, y));
+          fctx.fillStyle = p.color;
+          fctx.beginPath();
+          fctx.arc(cx, cy, p.size * (1 - t * 0.2), 0, Math.PI * 2);
+          fctx.fill();
+        }
+        fctx.restore();
+        nextParticles.push(p);
+      }
+      fxParticles = nextParticles;
+    }
+
+    if (!alive) {
+      gameEl.style.transform = '';
+      fxRunning = false;
+      fctx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+      return;
+    }
+
+    requestAnimationFrame(stepFx);
   }
 
   function getPointerCell(e) {
@@ -573,19 +839,10 @@
   }
 
   function canPlaceAnyRotation(p) {
-    let cells = p.cells;
-    const seen = new Set();
-    for (let rot = 0; rot < 4; rot++) {
-      const key = JSON.stringify(cells);
-      if (!seen.has(key)) {
-        seen.add(key);
-        for (let row = 0; row < SIZE; row++) {
-          for (let col = 0; col < SIZE; col++) {
-            if (canPlaceAt(cells, col, row)) return true;
-          }
-        }
+    for (let row = 0; row < SIZE; row++) {
+      for (let col = 0; col < SIZE; col++) {
+        if (canPlaceAt(p.cells, col, row)) return true;
       }
-      cells = rotateCells(cells);
     }
     return false;
   }
@@ -594,6 +851,7 @@
     if (!canPlaceAt(piece.cells, col, row)) return false;
 
     let gained = 0;
+    const placedCells = [];
     piece.cells.forEach(([x, y], i) => {
       const c = col + x;
       const r = row + y;
@@ -601,11 +859,14 @@
       board[r][c].occupied = true;
       board[r][c].placed = placedValue;
       gained += placedValue * board[r][c].base;
+      placedCells.push({ col: c, row: r, base: board[r][c].base, placedValue });
     });
 
     score += gained;
     moves++;
-    setCurrentPiece(makePiece());
+    shakeScreen(Math.min(14, 6 + Math.ceil(gained / 12)), 220);
+    spawnScoreTrail(placedCells, gained);
+    setCurrentPiece(makePiece(), 1.15);
     updateStats();
     checkGameOver();
     draw();
@@ -626,28 +887,26 @@
 
   function rerollPiece() {
     return spendScore(10, () => {
-      setCurrentPiece(makePiece());
+      spawnPreviewBurst(nextCanvas, piece.cells, 1.2);
+      setCurrentPiece(makePiece(), 1.4);
     });
   }
 
   function clearBoard() {
     return spendScore(100, () => {
+      const occupiedCells = [];
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          if (board[r][c].occupied) {
+            occupiedCells.push({ col: c, row: r, base: board[r][c].base, placedValue: board[r][c].placed });
+          }
+        }
+      }
+      spawnBoardClearParticles(occupiedCells);
       regenerateBoard();
-      if (!piece) setCurrentPiece(makePiece());
+      shakeScreen(12, 240);
+      draw();
     });
-  }
-
-  function rotatePiece() {
-    if (gameOver) return;
-    const rotated = rotatePieceState(piece, dragging ? dragAnchor : null);
-    piece = { cells: rotated.cells, values: rotated.values };
-    if (dragging && rotated.anchor) {
-      dragAnchor = rotated.anchor;
-      if (dragPointer) updateHoverFromPointer({ clientX: dragPointer.x, clientY: dragPointer.y });
-    } else if (hover) {
-      hover.valid = canPlaceAt(piece.cells, hover.col, hover.row);
-    }
-    draw();
   }
 
   function checkGameOver() {
@@ -660,7 +919,7 @@
 
   function drawCellBackground(x, y, w, cell) {
     const style = VALUE_STYLES[cell.base] || VALUE_STYLES[0];
-    ctx.fillStyle = cell.occupied ? '#c8b07a' : style.bg;
+    ctx.fillStyle = cell.occupied ? '#101412' : style.bg;
     ctx.fillRect(x, y, w, w);
   }
 
@@ -685,11 +944,6 @@
         ctx.textBaseline = 'middle';
         ctx.fillText(String(cell.base), x + s / 2, y + s / 2);
 
-        if (cell.occupied) {
-          ctx.fillStyle = '#101412';
-          ctx.font = `800 ${Math.floor(s * 0.16)}px ui-monospace, monospace`;
-          ctx.fillText(`×${cell.placed}`, x + s / 2, y + s * 0.76);
-        }
       }
     }
   }
@@ -757,26 +1011,36 @@
     const tipHeight = tooltip.offsetHeight;
     const left = dragRect.left + dragRect.width / 2;
     let top = dragRect.top - 10;
-    const below = top < tipHeight + 12;
+    const below = dragRect.top < tipHeight + 20;
     if (below) {
       top = dragRect.bottom + 10;
     }
     tooltip.classList.toggle('below', below);
     tooltip.style.left = `${Math.max(12 + tipWidth / 2, Math.min(window.innerWidth - 12 - tipWidth / 2, left))}px`;
-    tooltip.style.top = `${Math.max(12, top)}px`;
+    tooltip.style.top = `${Math.max(12, Math.min(window.innerHeight - 12 - tipHeight, top))}px`;
   }
 
-  function drawNext() {
+  function drawNext(now = performance.now()) {
     const w = nextCanvas.width;
     nctx.clearRect(0, 0, w, w);
     nctx.fillStyle = '#f8f1d8';
     nctx.fillRect(0, 0, w, w);
+
+    const reveal = pieceReveal ? Math.max(0, Math.min(1, (now - pieceReveal.start) / pieceReveal.duration)) : 1;
+    const pop = pieceReveal ? 0.72 + 0.28 * (1 - Math.pow(1 - reveal, 3)) : 1;
+    const spin = pieceReveal ? (1 - reveal) * 0.18 : 0;
 
     const maxX = Math.max(...piece.cells.map(c => c[0]));
     const maxY = Math.max(...piece.cells.map(c => c[1]));
     const block = Math.floor(w / Math.max(maxX + 2, maxY + 2, 4));
     const ox = Math.floor((w - (maxX + 1) * block) / 2);
     const oy = Math.floor((w - (maxY + 1) * block) / 2);
+
+    nctx.save();
+    nctx.translate(w / 2, w / 2);
+    nctx.scale(pop, pop);
+    nctx.rotate(spin);
+    nctx.translate(-w / 2, -w / 2);
 
     piece.cells.forEach(([x, y], i) => {
       const px = ox + x * block;
@@ -793,6 +1057,8 @@
       nctx.textBaseline = 'middle';
       nctx.fillText(String(piece.values[i]), px + block / 2, py + block / 2);
     });
+
+    nctx.restore();
   }
 
   function drawDragPreview() {
@@ -850,10 +1116,10 @@
     dctx.restore();
   }
 
-  function draw() {
+  function draw(now = performance.now()) {
     drawBoard();
     drawGhost();
-    drawNext();
+    drawNext(now);
     updateTooltip();
     updateStoreButtons();
   }
@@ -871,16 +1137,16 @@
     dragAnchor = e.currentTarget === nextCanvas ? getDragAnchorFromPreview(e) : { col: 0, row: 0 };
     updateHoverFromPointer(e);
     e.currentTarget?.setPointerCapture?.(e.pointerId);
-    draw();
     drawDragPreview();
+    draw();
   }
 
   function moveDrag(e) {
     if (!dragging || gameOver || e.pointerId !== activePointerId) return;
     dragPointer = { x: e.clientX, y: e.clientY };
     updateHoverFromPointer(e);
-    draw();
     drawDragPreview();
+    draw();
   }
 
   function endDrag(e) {
@@ -911,18 +1177,10 @@
   window.addEventListener('resize', resizeCanvases);
   window.addEventListener('orientationchange', resizeCanvases);
 
-  document.getElementById('rotateBtn').addEventListener('click', rotatePiece);
   document.getElementById('newBtn').addEventListener('click', newGame);
   document.getElementById('againBtn').addEventListener('click', newGame);
   rerollBtn.addEventListener('click', rerollPiece);
   clearBoardBtn.addEventListener('click', clearBoard);
-
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'r' || e.key === 'R' || e.code === 'Space') {
-      e.preventDefault();
-      rotatePiece();
-    }
-  });
 
   newGame();
 })();

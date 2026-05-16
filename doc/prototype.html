@@ -114,7 +114,14 @@
       display: grid;
       gap: 12px;
       align-content: start;
+      grid-template-columns: 1fr;
+    }
+
+    .top-panels {
+      display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      grid-column: 1 / -1;
     }
 
     h1 {
@@ -155,10 +162,36 @@
       min-width: 0;
     }
 
+    .store-box {
+      border: 2px solid var(--line);
+      padding: 6px;
+      background: #f4efe0;
+      min-width: 0;
+      display: grid;
+      gap: 6px;
+      align-content: start;
+    }
+
     .next-title {
       font-size: 12px;
       color: var(--muted);
       margin-bottom: 6px;
+    }
+
+    .store-title {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+
+    .store-item {
+      display: grid;
+      gap: 4px;
+    }
+
+    .store-item button {
+      width: 100%;
+      min-height: 40px;
     }
 
     #nextCanvas {
@@ -191,6 +224,13 @@
     }
 
     button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: 4px 4px 0 #000;
+    }
 
     .overlay {
       position: fixed;
@@ -227,6 +267,7 @@
       body { padding: 8px; }
       .board-wrap { padding: 8px; }
       .side { padding: 12px; }
+      .top-panels,
       .stats, .actions { grid-template-columns: 1fr; }
       .stat { font-size: 13px; }
     }
@@ -247,9 +288,21 @@
         <div class="stat"><b>Moves</b><span id="moves">0</span></div>
       </div>
 
-      <div class="next-box">
-        <div class="next-title">Current tetramino</div>
-        <canvas id="nextCanvas" width="200" height="200"></canvas>
+      <div class="top-panels">
+        <div class="next-box">
+          <div class="next-title">Current tetramino</div>
+          <canvas id="nextCanvas" width="200" height="200"></canvas>
+        </div>
+
+        <div class="store-box">
+          <div class="store-title">Store</div>
+          <div class="store-item">
+            <button id="rerollBtn">Reroll -10</button>
+          </div>
+          <div class="store-item">
+            <button id="clearBoardBtn">Clear board -100</button>
+          </div>
+        </div>
       </div>
 
       <div class="actions">
@@ -257,9 +310,6 @@
         <button id="newBtn">New game</button>
       </div>
 
-      <div class="help">
-        Drag the tetramino from the preview onto the board. Use Rotate if you need a better fit. Bright cells show where it will land and how many points each block gives.
-      </div>
     </aside>
   </main>
 
@@ -285,6 +335,8 @@
 
   const scoreEl = document.getElementById('score');
   const movesEl = document.getElementById('moves');
+  const rerollBtn = document.getElementById('rerollBtn');
+  const clearBoardBtn = document.getElementById('clearBoardBtn');
   const tooltip = document.getElementById('tooltip');
   const overlay = document.getElementById('overlay');
   const finalText = document.getElementById('finalText');
@@ -398,6 +450,21 @@
     updateStats();
     resizeCanvases();
     checkGameOver();
+  }
+
+  function setCurrentPiece(nextPiece) {
+    piece = nextPiece;
+    dragging = false;
+    dragPointer = null;
+    dragAnchor = { col: 0, row: 0 };
+    hover = null;
+    dragCell = null;
+  }
+
+  function regenerateBoard() {
+    board = Array.from({ length: SIZE }, () =>
+      Array.from({ length: SIZE }, () => ({ base: weightedPick(FIELD_WEIGHTS), occupied: false, placed: null }))
+    );
   }
 
   function updateStats() {
@@ -538,14 +605,36 @@
 
     score += gained;
     moves++;
-    piece = makePiece();
-    dragging = false;
-    dragCell = null;
-    hover = null;
+    setCurrentPiece(makePiece());
     updateStats();
     checkGameOver();
     draw();
     return true;
+  }
+
+  function spendScore(cost, action) {
+    if (score < cost) return false;
+    score -= cost;
+    action();
+    gameOver = false;
+    overlay.classList.remove('show');
+    updateStats();
+    draw();
+    checkGameOver();
+    return true;
+  }
+
+  function rerollPiece() {
+    return spendScore(10, () => {
+      setCurrentPiece(makePiece());
+    });
+  }
+
+  function clearBoard() {
+    return spendScore(100, () => {
+      regenerateBoard();
+      if (!piece) setCurrentPiece(makePiece());
+    });
   }
 
   function rotatePiece() {
@@ -766,6 +855,12 @@
     drawGhost();
     drawNext();
     updateTooltip();
+    updateStoreButtons();
+  }
+
+  function updateStoreButtons() {
+    rerollBtn.disabled = score < 10;
+    clearBoardBtn.disabled = score < 100;
   }
 
   function beginDrag(e) {
@@ -819,6 +914,8 @@
   document.getElementById('rotateBtn').addEventListener('click', rotatePiece);
   document.getElementById('newBtn').addEventListener('click', newGame);
   document.getElementById('againBtn').addEventListener('click', newGame);
+  rerollBtn.addEventListener('click', rerollPiece);
+  clearBoardBtn.addEventListener('click', clearBoard);
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'r' || e.key === 'R' || e.code === 'Space') {

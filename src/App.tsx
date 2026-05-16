@@ -24,7 +24,7 @@ export default function App() {
     }
 
     const registerServiceWorker = () => {
-      navigator.serviceWorker.register('/sw.js').catch(() => {
+      navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {
         // Ignore registration failures so the game still works as a normal app.
       });
     };

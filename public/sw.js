@@ -1,5 +1,13 @@
 const CACHE_NAME = 'polyfactor-pwa-v1';
-const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'];
+const BASE_URL = new URL('.', self.registration.scope).href;
+const APP_SHELL = [
+  new URL('index.html', BASE_URL).href,
+  new URL('manifest.webmanifest', BASE_URL).href,
+  new URL('icon-192.png', BASE_URL).href,
+  new URL('icon-512.png', BASE_URL).href,
+  new URL('apple-touch-icon.png', BASE_URL).href,
+];
+const INDEX_URL = new URL('index.html', BASE_URL).href;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -31,11 +39,13 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', copy));
+          if (response && response.ok && response.type === 'basic') {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(INDEX_URL, copy));
+          }
           return response;
         })
-        .catch(() => caches.match('/index.html')),
+        .catch(() => caches.match(INDEX_URL)),
     );
     return;
   }
@@ -60,7 +70,7 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
           return response;
         })
-        .catch(() => caches.match('/index.html'));
+        .catch(() => caches.match(INDEX_URL));
     }),
   );
 });

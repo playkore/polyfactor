@@ -2,7 +2,6 @@ import {
   SIZE,
   VALUE_STYLES,
   canPlaceAt,
-  canPlaceAnyPlacement,
   clearBoard as createClearedBoard,
   computePlacementTotal,
   createBoard,
@@ -10,6 +9,7 @@ import {
   deserializeGameState,
   serializeGameState,
   placePiece,
+  shouldShowGameOver,
   type SavedGameStateV1,
   type CellCoord,
   type GameBoard,
@@ -450,16 +450,7 @@ export function createGameController(elements: GameControllerElements) {
     triggerPieceReveal(1);
     updateStats();
     resizeCanvases();
-    if (!gameOver) {
-      checkGameOver();
-    }
-    if (gameOver) {
-      elements.finalTextEl.textContent = `Final score: ${score}. Moves made: ${moves}.`;
-      elements.overlayEl.classList.add('show');
-    } else {
-      elements.finalTextEl.textContent = '';
-      elements.overlayEl.classList.remove('show');
-    }
+    checkGameOver();
     saveGameState();
     draw();
   }
@@ -843,10 +834,13 @@ export function createGameController(elements: GameControllerElements) {
   }
 
   function checkGameOver(): void {
-    if (!canPlaceAnyPlacement(board, piece)) {
-      gameOver = true;
+    gameOver = shouldShowGameOver(board, piece, score);
+    if (gameOver) {
       elements.finalTextEl.textContent = `Final score: ${score}. Moves made: ${moves}.`;
       elements.overlayEl.classList.add('show');
+    } else {
+      elements.finalTextEl.textContent = '';
+      elements.overlayEl.classList.remove('show');
     }
   }
 

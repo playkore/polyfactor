@@ -10,6 +10,7 @@ import {
   serializeGameState,
   normalizeCells,
   placePiece,
+  shouldShowGameOver,
   rotatePieceState,
   SIZE,
   type SavedGameStateV1,
@@ -101,6 +102,20 @@ test('clearBoard returns a fresh empty board', () => {
   const board = clearBoard(constantRng([0.1, 0.2, 0.3]));
   assert.equal(board.length, SIZE);
   assert.equal(board[7]?.[7]?.occupied, false);
+});
+
+test('shouldShowGameOver stays false when reroll is affordable', () => {
+  const board: GameBoard = Array.from({ length: SIZE }, () =>
+    Array.from({ length: SIZE }, () => ({ base: 1 as const, occupied: true, placed: 1 })),
+  );
+  const piece = {
+    cells: [[0, 0], [1, 0], [0, 1], [1, 1]],
+    values: [1, 3, 5, 8],
+  };
+
+  assert.equal(shouldShowGameOver(board, piece, 9), true);
+  assert.equal(shouldShowGameOver(board, piece, 10), false);
+  assert.equal(shouldShowGameOver(board, piece, 100), false);
 });
 
 test('serializeGameState round-trips a saved game snapshot', () => {

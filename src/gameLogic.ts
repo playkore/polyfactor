@@ -166,6 +166,10 @@ export function canPlaceAnyPlacement(board: GameBoard, piece: PieceState): boole
   return false;
 }
 
+export function shouldShowGameOver(board: GameBoard, piece: PieceState, score: number): boolean {
+  return !canPlaceAnyPlacement(board, piece) && score < 10;
+}
+
 export function computePlacementTotal(board: GameBoard, piece: PieceState, col: number, row: number): number {
   return piece.cells.reduce((total, [x, y], index) => {
     const c = col + x;

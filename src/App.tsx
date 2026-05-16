@@ -111,8 +111,6 @@ export default function App() {
         </section>
 
         <aside className="side">
-          <h1>Tetramino<br />Multiplier</h1>
-
           <div className="stats">
             <div className="stat">
               <b>Score</b>

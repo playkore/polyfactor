@@ -424,7 +424,9 @@ export function createGameController(elements: GameControllerElements) {
   function getDragPreviewOffset(): number {
     if (!dragIsTouch) return 0;
     const block = Math.max(24, Math.min(52, Math.floor(Math.min(window.innerWidth, window.innerHeight) / 10)));
-    return Math.max(28, Math.round(block * 0.9));
+    const maxY = Math.max(...piece.cells.map(cell => cell[1]));
+    const pieceHeight = (maxY + 1) * block;
+    return Math.max(28, Math.round(block * 0.9)) + pieceHeight;
   }
 
   function getDragAnchorFromPreview(e: PointerEvent): CellCoord {

@@ -1,11 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { createGameController } from './gameController';
 import './styles.css';
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
-}
 
 export default function App() {
   const rootRef = useRef<HTMLElement | null>(null);
@@ -22,32 +17,6 @@ export default function App() {
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const finalTextRef = useRef<HTMLParagraphElement | null>(null);
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isStandalone, setIsStandalone] = useState(false);
-
-  useEffect(() => {
-    const onBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as BeforeInstallPromptEvent);
-    };
-
-    const onAppInstalled = () => {
-      setInstallPrompt(null);
-    };
-
-    const standalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-
-    setIsStandalone(standalone);
-    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
-    window.addEventListener('appinstalled', onAppInstalled);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', onAppInstalled);
-    };
-  }, []);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) {
@@ -124,18 +93,6 @@ export default function App() {
     return () => controller.destroy();
   }, []);
 
-  const handleInstallClick = async () => {
-    if (!installPrompt) {
-      return;
-    }
-
-    await installPrompt.prompt();
-    const choice = await installPrompt.userChoice;
-    if (choice.outcome === 'accepted') {
-      setInstallPrompt(null);
-    }
-  };
-
   return (
     <main className="game" ref={rootRef}>
       <section className="board-wrap">
@@ -154,16 +111,7 @@ export default function App() {
 
         <div className="actions">
           <button ref={newRef} data-testid="new-game-button">New game</button>
-          {installPrompt && !isStandalone ? (
-            <button type="button" onClick={handleInstallClick}>
-              Install app
-            </button>
-          ) : null}
         </div>
-
-        <p className="help">
-          Install it for standalone play and offline access after the first load.
-        </p>
 
         <div className="stats">
           <div className="stat">

@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Tetramino Multiplier</title>
+  <style>
+    :root {
+      --bg: #101412;
+      --panel: #eee8d0;
+      --ink: #101412;
+      --muted: #6f6a5b;
+      --line: #101412;
+      --cell: #f8f1d8;
+      --cell2: #ddd4b8;
+      --good: #b9d58b;
+      --bad: #d88d7c;
+      --piece: #f4cf6b;
+      --placed: #c8b07a;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      color-scheme: dark;
+    }
+
+    * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      margin: 0;
+      min-height: 100svh;
+      background: var(--bg);
+      color: var(--panel);
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 12px;
+    }
+
+    .game {
+      width: min(100%, 430px);
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .board-wrap, .side {
+      background: var(--panel);
+      color: var(--ink);
+      border: 3px solid var(--line);
+      box-shadow: 8px 8px 0 #000;
+    }
+
+    .board-wrap { padding: 10px; }
+
+    .board-wrap {
+      position: relative;
+    }
+
+    .board-wrap, .side, .overlay {
+      border-radius: 2px;
+    }
+
+    canvas {
+      width: 100%;
+      aspect-ratio: 1;
+      display: block;
+      background: var(--cell);
+      touch-action: none;
+      image-rendering: pixelated;
+    }
+
+    #dragCanvas {
+      position: fixed;
+      left: 0;
+      top: 0;
+      background: transparent;
+      pointer-events: none;
+      z-index: 20;
+      display: none;
+    }
+
+    .tooltip {
+      position: fixed;
+      left: 0;
+      top: 0;
+      transform: translate(-50%, -100%);
+      background: #101412;
+      color: #eee8d0;
+      border: 2px solid #101412;
+      box-shadow: 4px 4px 0 #000;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+      display: none;
+      white-space: nowrap;
+      z-index: 5;
+    }
+
+    .tooltip.show {
+      display: block;
+    }
+
+    .tooltip.bad {
+      background: #6b1e16;
+      border-color: #6b1e16;
+    }
+
+    .tooltip.below {
+      transform: translate(-50%, 10px);
+    }
+
+    .side {
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    h1 {
+      font-size: clamp(20px, 4vw, 28px);
+      margin: 0;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      grid-column: 1 / -1;
+    }
+
+    .stats {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-column: 1 / -1;
+    }
+
+    .stat {
+      display: flex;
+      justify-content: space-between;
+      border-top: 2px solid var(--line);
+      padding-top: 8px;
+      font-size: 14px;
+      gap: 10px;
+    }
+
+    .help {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      grid-column: 1 / -1;
+    }
+
+    .next-box {
+      border: 2px solid var(--line);
+      padding: 8px;
+      background: #fff8df;
+      min-width: 0;
+    }
+
+    .next-title {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    #nextCanvas {
+      width: 100%;
+      aspect-ratio: 1;
+      background: #f8f1d8;
+      cursor: grab;
+    }
+
+    #nextCanvas:active { cursor: grabbing; }
+
+    .actions {
+      display: grid;
+      gap: 10px;
+      grid-column: 1 / -1;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    button {
+      appearance: none;
+      border: 3px solid var(--line);
+      background: #fff8df;
+      color: var(--ink);
+      font: inherit;
+      font-weight: 800;
+      padding: 10px 12px;
+      cursor: pointer;
+      box-shadow: 4px 4px 0 #000;
+      min-height: 48px;
+    }
+
+    button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.72);
+      display: none;
+      place-items: center;
+      padding: 20px;
+    }
+
+    .overlay.show { display: grid; }
+
+    .modal {
+      width: min(420px, 100%);
+      background: var(--panel);
+      color: var(--ink);
+      border: 3px solid var(--line);
+      box-shadow: 8px 8px 0 #000;
+      padding: 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .modal h2 { margin: 0; font-size: 24px; }
+    .modal p { margin: 0; line-height: 1.35; color: var(--muted); }
+
+    @media (max-width: 720px) {
+      body { align-items: start; padding: 10px; }
+      .game { width: min(100%, 430px); }
+      button { min-height: 52px; }
+    }
+
+    @media (max-width: 420px) {
+      body { padding: 8px; }
+      .board-wrap { padding: 8px; }
+      .side { padding: 12px; }
+      .stats, .actions { grid-template-columns: 1fr; }
+      .stat { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="game">
+    <section class="board-wrap">
+      <div class="tooltip" id="tooltip"></div>
+      <canvas id="board" width="640" height="640" aria-label="8 by 8 game board"></canvas>
+    </section>
+
+    <aside class="side">
+      <h1>Tetramino<br>Multiplier</h1>
+
+      <div class="stats">
+        <div class="stat"><b>Score</b><span id="score">0</span></div>
+        <div class="stat"><b>Moves</b><span id="moves">0</span></div>
+      </div>
+
+      <div class="next-box">
+        <div class="next-title">Current tetramino</div>
+        <canvas id="nextCanvas" width="200" height="200"></canvas>
+      </div>
+
+      <div class="actions">
+        <button id="rotateBtn">Rotate</button>
+        <button id="newBtn">New game</button>
+      </div>
+
+      <div class="help">
+        Drag the tetramino from the preview onto the board. Use Rotate if you need a better fit. Bright cells show where it will land and how many points each block gives.
+      </div>
+    </aside>
+  </main>
+
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h2>Game over</h2>
+      <p id="finalText"></p>
+      <button id="againBtn">Play again</button>
+    </div>
+  </div>
+
+  <canvas id="dragCanvas" aria-hidden="true"></canvas>
+
+<script>
+(() => {
+  const SIZE = 8;
+  const boardCanvas = document.getElementById('board');
+  const nextCanvas = document.getElementById('nextCanvas');
+  const dragCanvas = document.getElementById('dragCanvas');
+  const ctx = boardCanvas.getContext('2d');
+  const nctx = nextCanvas.getContext('2d');
+  const dctx = dragCanvas.getContext('2d');
+
+  const scoreEl = document.getElementById('score');
+  const movesEl = document.getElementById('moves');
+  const tooltip = document.getElementById('tooltip');
+  const overlay = document.getElementById('overlay');
+  const finalText = document.getElementById('finalText');
+
+  const FIELD_WEIGHTS = [
+    [0, 0.38],
+    [1, 0.40],
+    [3, 0.15],
+    [5, 0.055],
+    [8, 0.015],
+  ];
+
+  const PIECE_WEIGHTS = [
+    [0, 0.18],
+    [1, 0.47],
+    [3, 0.25],
+    [5, 0.10],
+  ];
+
+  const SHAPES = [
+    [[0,0],[1,0],[2,0],[3,0]], // I
+    [[0,0],[1,0],[0,1],[1,1]], // O
+    [[0,0],[1,0],[2,0],[1,1]], // T
+    [[0,0],[1,0],[1,1],[2,1]], // S
+    [[1,0],[2,0],[0,1],[1,1]], // Z
+    [[0,0],[0,1],[1,1],[2,1]], // J
+    [[2,0],[0,1],[1,1],[2,1]], // L
+  ];
+
+  const VALUE_STYLES = {
+    0: { bg: '#ddd4b8', fg: '#918a76' },
+    1: { bg: '#e8f1fb', fg: '#255c9b' },
+    3: { bg: '#e8f6ef', fg: '#2e7d57' },
+    5: { bg: '#fff1d9', fg: '#9b5b1f' },
+    8: { bg: '#f6e3e0', fg: '#9a3f3a' },
+  };
+
+  let board, piece, score, moves, dragging, dragCell, hover, gameOver;
+  let activePointerId = null;
+  let dragPointer = null;
+  let dragAnchor = { col: 0, row: 0 };
+
+  function weightedPick(items) {
+    const r = Math.random();
+    let acc = 0;
+    for (const [value, weight] of items) {
+      acc += weight;
+      if (r <= acc) return value;
+    }
+    return items[items.length - 1][0];
+  }
+
+  function normalizeCells(cells) {
+    const minX = Math.min(...cells.map(c => c[0]));
+    const minY = Math.min(...cells.map(c => c[1]));
+    return cells
+      .map(([x, y]) => [x - minX, y - minY])
+      .sort((a, b) => (a[1] - b[1]) || (a[0] - b[0]));
+  }
+
+  function rotatePieceState(piece, anchor = null) {
+    const rotated = piece.cells.map(([x, y], i) => ({
+      cell: [y, -x],
+      value: piece.values[i],
+    }));
+
+    const minX = Math.min(...rotated.map(p => p.cell[0]));
+    const minY = Math.min(...rotated.map(p => p.cell[1]));
+    const normalized = rotated
+      .map(({ cell, value }) => ({
+        cell: [cell[0] - minX, cell[1] - minY],
+        value,
+      }))
+      .sort((a, b) => (a.cell[1] - b.cell[1]) || (a.cell[0] - b.cell[0]));
+
+    let rotatedAnchor = null;
+    if (anchor) {
+      rotatedAnchor = {
+        col: anchor.row - minX,
+        row: -anchor.col - minY,
+      };
+    }
+
+    return {
+      cells: normalized.map(p => p.cell),
+      values: normalized.map(p => p.value),
+      anchor: rotatedAnchor,
+    };
+  }
+
+  function makePiece() {
+    const shape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+    return {
+      cells: normalizeCells(shape),
+      values: Array.from({ length: 4 }, () => weightedPick(PIECE_WEIGHTS)),
+    };
+  }
+
+  function newGame() {
+    board = Array.from({ length: SIZE }, () =>
+      Array.from({ length: SIZE }, () => ({ base: weightedPick(FIELD_WEIGHTS), occupied: false, placed: null }))
+    );
+    score = 0;
+    moves = 0;
+    piece = makePiece();
+    dragging = false;
+    dragCell = null;
+    hover = null;
+    gameOver = false;
+    overlay.classList.remove('show');
+    updateStats();
+    resizeCanvases();
+    checkGameOver();
+  }
+
+  function updateStats() {
+    scoreEl.textContent = String(score);
+    movesEl.textContent = String(moves);
+  }
+
+  function cellSize() {
+    return boardCanvas.width / SIZE;
+  }
+
+  function resizeCanvas(canvas, logicalSize = null) {
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const width = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+    const height = logicalSize ? Math.max(1, Math.floor(canvas.clientHeight * dpr)) : width;
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+      return true;
+    }
+    return false;
+  }
+
+  function resizeCanvases() {
+    const boardChanged = resizeCanvas(boardCanvas);
+    const nextChanged = resizeCanvas(nextCanvas);
+    const dragChanged = resizeDragCanvas();
+    if (boardChanged || nextChanged) draw();
+    if (dragChanged) drawDragPreview();
+  }
+
+  function resizeDragCanvas() {
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return false;
+  }
+
+  function getPointerCell(e) {
+    return getPointerCellAt(e.clientX, e.clientY);
+  }
+
+  function getPointerCellAt(clientX, clientY) {
+    const rect = boardCanvas.getBoundingClientRect();
+    const inside = clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+    const x = (clientX - rect.left) / rect.width * boardCanvas.width;
+    const y = (clientY - rect.top) / rect.height * boardCanvas.height;
+    return {
+      col: Math.floor(x / cellSize()),
+      row: Math.floor(y / cellSize()),
+      inside,
+    };
+  }
+
+  function getDragLift() {
+    const maxX = Math.max(...piece.cells.map(c => c[0]));
+    const maxY = Math.max(...piece.cells.map(c => c[1]));
+    const block = Math.max(24, Math.min(52, Math.floor(Math.min(window.innerWidth, window.innerHeight) / 10)));
+    return Math.max(28, Math.round(block * 1.1));
+  }
+
+  function getDragAnchorFromPreview(e) {
+    const rect = nextCanvas.getBoundingClientRect();
+    const localX = e.clientX - rect.left;
+    const localY = e.clientY - rect.top;
+    const maxX = Math.max(...piece.cells.map(c => c[0]));
+    const maxY = Math.max(...piece.cells.map(c => c[1]));
+    const block = Math.floor(rect.width / Math.max(maxX + 2, maxY + 2, 4));
+    const ox = Math.floor((rect.width - (maxX + 1) * block) / 2);
+    const oy = Math.floor((rect.height - (maxY + 1) * block) / 2);
+
+    let best = piece.cells[0];
+    let bestDist = Infinity;
+    for (const [x, y] of piece.cells) {
+      const cx = ox + x * block + block / 2;
+      const cy = oy + y * block + block / 2;
+      const dist = Math.hypot(localX - cx, localY - cy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = [x, y];
+      }
+    }
+
+    return { col: best[0], row: best[1] };
+  }
+
+  function updateHoverFromPointer(e) {
+    const lift = dragging ? getDragLift() : 0;
+    const p = getPointerCellAt(e.clientX, e.clientY - lift);
+    if (!p.inside) {
+      hover = null;
+      return;
+    }
+    const col = p.col - dragAnchor.col;
+    const row = p.row - dragAnchor.row;
+    hover = { col, row, valid: canPlaceAt(piece.cells, col, row) };
+  }
+
+  function canPlaceAt(cells, col, row) {
+    for (const [x, y] of cells) {
+      const c = col + x;
+      const r = row + y;
+      if (c < 0 || c >= SIZE || r < 0 || r >= SIZE) return false;
+      if (board[r][c].occupied) return false;
+    }
+    return true;
+  }
+
+  function canPlaceAnyRotation(p) {
+    let cells = p.cells;
+    const seen = new Set();
+    for (let rot = 0; rot < 4; rot++) {
+      const key = JSON.stringify(cells);
+      if (!seen.has(key)) {
+        seen.add(key);
+        for (let row = 0; row < SIZE; row++) {
+          for (let col = 0; col < SIZE; col++) {
+            if (canPlaceAt(cells, col, row)) return true;
+          }
+        }
+      }
+      cells = rotateCells(cells);
+    }
+    return false;
+  }
+
+  function placePiece(col, row) {
+    if (!canPlaceAt(piece.cells, col, row)) return false;
+
+    let gained = 0;
+    piece.cells.forEach(([x, y], i) => {
+      const c = col + x;
+      const r = row + y;
+      const placedValue = piece.values[i];
+      board[r][c].occupied = true;
+      board[r][c].placed = placedValue;
+      gained += placedValue * board[r][c].base;
+    });
+
+    score += gained;
+    moves++;
+    piece = makePiece();
+    dragging = false;
+    dragCell = null;
+    hover = null;
+    updateStats();
+    checkGameOver();
+    draw();
+    return true;
+  }
+
+  function rotatePiece() {
+    if (gameOver) return;
+    const rotated = rotatePieceState(piece, dragging ? dragAnchor : null);
+    piece = { cells: rotated.cells, values: rotated.values };
+    if (dragging && rotated.anchor) {
+      dragAnchor = rotated.anchor;
+      if (dragPointer) updateHoverFromPointer({ clientX: dragPointer.x, clientY: dragPointer.y });
+    } else if (hover) {
+      hover.valid = canPlaceAt(piece.cells, hover.col, hover.row);
+    }
+    draw();
+  }
+
+  function checkGameOver() {
+    if (!canPlaceAnyRotation(piece)) {
+      gameOver = true;
+      finalText.textContent = `Final score: ${score}. Moves made: ${moves}.`;
+      overlay.classList.add('show');
+    }
+  }
+
+  function drawCellBackground(x, y, w, cell) {
+    const style = VALUE_STYLES[cell.base] || VALUE_STYLES[0];
+    ctx.fillStyle = cell.occupied ? '#c8b07a' : style.bg;
+    ctx.fillRect(x, y, w, w);
+  }
+
+  function drawBoard() {
+    const s = cellSize();
+    ctx.clearRect(0, 0, boardCanvas.width, boardCanvas.height);
+
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const x = c * s;
+        const y = r * s;
+        const cell = board[r][c];
+        drawCellBackground(x, y, s, cell);
+
+        ctx.strokeStyle = '#101412';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x + 1.5, y + 1.5, s - 3, s - 3);
+
+        ctx.fillStyle = (VALUE_STYLES[cell.base] || VALUE_STYLES[0]).fg;
+        ctx.font = `800 ${Math.floor(s * 0.34)}px ui-monospace, monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(cell.base), x + s / 2, y + s / 2);
+
+        if (cell.occupied) {
+          ctx.fillStyle = '#101412';
+          ctx.font = `800 ${Math.floor(s * 0.16)}px ui-monospace, monospace`;
+          ctx.fillText(`×${cell.placed}`, x + s / 2, y + s * 0.76);
+        }
+      }
+    }
+  }
+
+  function drawGhost() {
+    if (!hover || !dragging) return;
+    const s = cellSize();
+    const fill = hover.valid ? '#b9d58b' : '#d88d7c';
+    const outline = hover.valid ? '#314d19' : '#6b1e16';
+
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+
+    piece.cells.forEach(([x, y], i) => {
+      const c = hover.col + x;
+      const r = hover.row + y;
+      if (c < 0 || c >= SIZE || r < 0 || r >= SIZE) return;
+      const px = c * s;
+      const py = r * s;
+      const base = board[r][c].base;
+      const pieceValue = piece.values[i];
+      const previewScore = base * pieceValue;
+
+      ctx.fillStyle = fill;
+      ctx.fillRect(px + 3, py + 3, s - 6, s - 6);
+      ctx.strokeStyle = outline;
+      ctx.lineWidth = 6;
+      ctx.strokeRect(px + 6, py + 6, s - 12, s - 12);
+      ctx.strokeStyle = '#101412';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(px + 13, py + 13, s - 26, s - 26);
+
+      ctx.fillStyle = '#101412';
+      ctx.font = `800 ${Math.floor(s * 0.34)}px ui-monospace, monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(pieceValue), px + s / 2, py + s * 0.45);
+
+      ctx.font = `800 ${Math.floor(s * 0.16)}px ui-monospace, monospace`;
+      ctx.fillText(`+${previewScore}`, px + s / 2, py + s * 0.72);
+    });
+
+    ctx.restore();
+  }
+
+  function updateTooltip() {
+    if (!dragging || !hover) {
+      tooltip.classList.remove('show', 'bad', 'below');
+      return;
+    }
+
+    const total = piece.cells.reduce((sum, [x, y], i) => {
+      const c = hover.col + x;
+      const r = hover.row + y;
+      if (c < 0 || c >= SIZE || r < 0 || r >= SIZE) return sum;
+      return sum + board[r][c].base * piece.values[i];
+    }, 0);
+
+    tooltip.textContent = hover.valid ? `Total: ${total} pts` : 'Cannot place here';
+    tooltip.classList.add('show');
+    tooltip.classList.toggle('bad', !hover.valid);
+
+    const dragRect = dragCanvas.getBoundingClientRect();
+    const tipWidth = tooltip.offsetWidth;
+    const tipHeight = tooltip.offsetHeight;
+    const left = dragRect.left + dragRect.width / 2;
+    let top = dragRect.top - 10;
+    const below = top < tipHeight + 12;
+    if (below) {
+      top = dragRect.bottom + 10;
+    }
+    tooltip.classList.toggle('below', below);
+    tooltip.style.left = `${Math.max(12 + tipWidth / 2, Math.min(window.innerWidth - 12 - tipWidth / 2, left))}px`;
+    tooltip.style.top = `${Math.max(12, top)}px`;
+  }
+
+  function drawNext() {
+    const w = nextCanvas.width;
+    nctx.clearRect(0, 0, w, w);
+    nctx.fillStyle = '#f8f1d8';
+    nctx.fillRect(0, 0, w, w);
+
+    const maxX = Math.max(...piece.cells.map(c => c[0]));
+    const maxY = Math.max(...piece.cells.map(c => c[1]));
+    const block = Math.floor(w / Math.max(maxX + 2, maxY + 2, 4));
+    const ox = Math.floor((w - (maxX + 1) * block) / 2);
+    const oy = Math.floor((w - (maxY + 1) * block) / 2);
+
+    piece.cells.forEach(([x, y], i) => {
+      const px = ox + x * block;
+      const py = oy + y * block;
+      const style = VALUE_STYLES[piece.values[i]] || VALUE_STYLES[0];
+      nctx.fillStyle = style.bg;
+      nctx.fillRect(px + 4, py + 4, block - 8, block - 8);
+      nctx.strokeStyle = '#101412';
+      nctx.lineWidth = 3;
+      nctx.strokeRect(px + 4, py + 4, block - 8, block - 8);
+      nctx.fillStyle = style.fg;
+      nctx.font = `800 ${Math.floor(block * 0.38)}px ui-monospace, monospace`;
+      nctx.textAlign = 'center';
+      nctx.textBaseline = 'middle';
+      nctx.fillText(String(piece.values[i]), px + block / 2, py + block / 2);
+    });
+  }
+
+  function drawDragPreview() {
+    if (!dragging || !dragPointer) {
+      dragCanvas.style.display = 'none';
+      return;
+    }
+
+    dragCanvas.style.display = 'block';
+
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const maxX = Math.max(...piece.cells.map(c => c[0]));
+    const maxY = Math.max(...piece.cells.map(c => c[1]));
+    const block = Math.max(24, Math.min(52, Math.floor(Math.min(window.innerWidth, window.innerHeight) / 10)));
+    const pad = 4;
+    const w = (maxX + 1) * block + pad * 2;
+    const h = (maxY + 1) * block + pad * 2;
+    const lift = getDragLift();
+    const anchorX = pad + dragAnchor.col * block + block / 2;
+    const anchorY = pad + dragAnchor.row * block + block / 2;
+
+    dragCanvas.style.width = `${w}px`;
+    dragCanvas.style.height = `${h}px`;
+    dragCanvas.style.left = `${Math.round(dragPointer.x - anchorX)}px`;
+    dragCanvas.style.top = `${Math.round(dragPointer.y - anchorY - lift)}px`;
+
+    if (dragCanvas.width !== Math.round(w * dpr) || dragCanvas.height !== Math.round(h * dpr)) {
+      dragCanvas.width = Math.round(w * dpr);
+      dragCanvas.height = Math.round(h * dpr);
+    }
+    dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    dctx.clearRect(0, 0, w, h);
+
+    dctx.save();
+    dctx.globalAlpha = 0.55;
+
+    piece.cells.forEach(([x, y], i) => {
+      const px = pad + x * block;
+      const py = pad + y * block;
+      const style = VALUE_STYLES[piece.values[i]] || VALUE_STYLES[0];
+
+      dctx.fillStyle = style.bg;
+      dctx.fillRect(px + 3, py + 3, block - 6, block - 6);
+      dctx.strokeStyle = '#101412';
+      dctx.lineWidth = 3;
+      dctx.strokeRect(px + 3, py + 3, block - 6, block - 6);
+
+      dctx.fillStyle = style.fg;
+      dctx.font = `800 ${Math.floor(block * 0.34)}px ui-monospace, monospace`;
+      dctx.textAlign = 'center';
+      dctx.textBaseline = 'middle';
+      dctx.fillText(String(piece.values[i]), px + block / 2, py + block / 2);
+    });
+
+    dctx.restore();
+  }
+
+  function draw() {
+    drawBoard();
+    drawGhost();
+    drawNext();
+    updateTooltip();
+  }
+
+  function beginDrag(e) {
+    if (gameOver) return;
+    dragging = true;
+    activePointerId = e.pointerId;
+    dragPointer = { x: e.clientX, y: e.clientY };
+    dragAnchor = e.currentTarget === nextCanvas ? getDragAnchorFromPreview(e) : { col: 0, row: 0 };
+    updateHoverFromPointer(e);
+    e.currentTarget?.setPointerCapture?.(e.pointerId);
+    draw();
+    drawDragPreview();
+  }
+
+  function moveDrag(e) {
+    if (!dragging || gameOver || e.pointerId !== activePointerId) return;
+    dragPointer = { x: e.clientX, y: e.clientY };
+    updateHoverFromPointer(e);
+    draw();
+    drawDragPreview();
+  }
+
+  function endDrag(e) {
+    if (!dragging || gameOver || e.pointerId !== activePointerId) return;
+    if (hover && hover.valid) placePiece(hover.col, hover.row);
+    dragging = false;
+    activePointerId = null;
+    hover = null;
+    dragPointer = null;
+    draw();
+    drawDragPreview();
+  }
+
+  function cancelDrag() {
+    dragging = false;
+    activePointerId = null;
+    hover = null;
+    dragPointer = null;
+    draw();
+    drawDragPreview();
+  }
+
+  nextCanvas.addEventListener('pointerdown', beginDrag);
+  boardCanvas.addEventListener('pointerdown', beginDrag);
+  window.addEventListener('pointermove', moveDrag);
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', cancelDrag);
+  window.addEventListener('resize', resizeCanvases);
+  window.addEventListener('orientationchange', resizeCanvases);
+
+  document.getElementById('rotateBtn').addEventListener('click', rotatePiece);
+  document.getElementById('newBtn').addEventListener('click', newGame);
+  document.getElementById('againBtn').addEventListener('click', newGame);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'r' || e.key === 'R' || e.code === 'Space') {
+      e.preventDefault();
+      rotatePiece();
+    }
+  });
+
+  newGame();
+})();
+</script>
+</body>
+</html>

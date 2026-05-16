@@ -1,5 +1,0 @@
-script: "/main/main.gui_script"
-fonts {
-  name: "default"
-  font: "/builtins/fonts/default.font"
-}

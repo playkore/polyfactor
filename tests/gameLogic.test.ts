@@ -4,12 +4,15 @@ import {
   canPlaceAt,
   clearBoard,
   computePlacementTotal,
+  deserializeGameState,
   createBoard,
   createPiece,
+  serializeGameState,
   normalizeCells,
   placePiece,
   rotatePieceState,
   SIZE,
+  type SavedGameStateV1,
   type GameBoard,
 } from '../src/gameLogic';
 
@@ -98,4 +101,32 @@ test('clearBoard returns a fresh empty board', () => {
   const board = clearBoard(constantRng([0.1, 0.2, 0.3]));
   assert.equal(board.length, SIZE);
   assert.equal(board[7]?.[7]?.occupied, false);
+});
+
+test('serializeGameState round-trips a saved game snapshot', () => {
+  const board = createBoard(constantRng([0, 0.5, 0.9]));
+  const piece = createPiece(constantRng([0, 0.05, 0.25, 0.75, 0.95]));
+  board[0]![0] = { ...board[0]![0], occupied: true, placed: 3 };
+  board[2]![4] = { ...board[2]![4], occupied: true, placed: 8 };
+
+  const saved: SavedGameStateV1 = {
+    version: 1,
+    board,
+    piece,
+    score: 42,
+    moves: 7,
+    gameOver: true,
+  };
+
+  const restored = deserializeGameState(serializeGameState(saved));
+
+  assert.deepEqual(restored, saved);
+});
+
+test('deserializeGameState rejects invalid snapshots', () => {
+  assert.equal(deserializeGameState('not json'), null);
+  assert.equal(
+    deserializeGameState(JSON.stringify({ version: 1, board: [], piece: {}, score: 0, moves: 0, gameOver: false })),
+    null,
+  );
 });

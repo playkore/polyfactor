@@ -95,6 +95,10 @@ export default function App() {
 
   return (
     <>
+      <div className="top-bar">
+        <button ref={newRef} data-testid="new-game-button">New game</button>
+      </div>
+
       <main className="game" ref={rootRef}>
         <section className="board-wrap">
           <canvas
@@ -108,10 +112,6 @@ export default function App() {
 
         <aside className="side">
           <h1>Tetramino<br />Multiplier</h1>
-
-          <div className="actions">
-            <button ref={newRef} data-testid="new-game-button">New game</button>
-          </div>
 
           <div className="stats">
             <div className="stat">

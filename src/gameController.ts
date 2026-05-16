@@ -7,7 +7,10 @@ import {
   computePlacementTotal,
   createBoard,
   createPiece,
+  deserializeGameState,
+  serializeGameState,
   placePiece,
+  type SavedGameStateV1,
   type CellCoord,
   type GameBoard,
   type PieceState,
@@ -91,6 +94,8 @@ interface SpendResult {
   allowed: boolean;
 }
 
+const STORAGE_KEY = 'polyfactor.saved-game.v1';
+
 function resizeCanvas(canvas: HTMLCanvasElement, logicalSize: number | null = null): boolean {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const width = Math.max(1, Math.floor(canvas.clientWidth * dpr));
@@ -145,6 +150,34 @@ export function createGameController(elements: GameControllerElements) {
   let fxFrameId: number | null = null;
   let fxLastTime = 0;
   let destroyed = false;
+
+  function buildSavedState(): SavedGameStateV1 {
+    return {
+      version: 1,
+      board,
+      piece,
+      score,
+      moves,
+      gameOver,
+    };
+  }
+
+  function saveGameState(): void {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, serializeGameState(buildSavedState()));
+    } catch {
+      // Ignore storage failures so gameplay continues normally.
+    }
+  }
+
+  function loadSavedGameState(): SavedGameStateV1 | null {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      return raw ? deserializeGameState(raw) : null;
+    } catch {
+      return null;
+    }
+  }
 
   function weightedShake(power: number, duration: number): void {
     shakeEffect = {
@@ -399,6 +432,35 @@ export function createGameController(elements: GameControllerElements) {
     updateStats();
     resizeCanvases();
     checkGameOver();
+    saveGameState();
+    draw();
+  }
+
+  function restoreGameState(savedState: SavedGameStateV1): void {
+    board = savedState.board;
+    piece = savedState.piece;
+    score = savedState.score;
+    moves = savedState.moves;
+    gameOver = savedState.gameOver;
+    dragging = false;
+    dragPointer = null;
+    hover = null;
+    activePointerId = null;
+    dragIsTouch = false;
+    triggerPieceReveal(1);
+    updateStats();
+    resizeCanvases();
+    if (!gameOver) {
+      checkGameOver();
+    }
+    if (gameOver) {
+      elements.finalTextEl.textContent = `Final score: ${score}. Moves made: ${moves}.`;
+      elements.overlayEl.classList.add('show');
+    } else {
+      elements.finalTextEl.textContent = '';
+      elements.overlayEl.classList.remove('show');
+    }
+    saveGameState();
     draw();
   }
 
@@ -805,6 +867,7 @@ export function createGameController(elements: GameControllerElements) {
     setCurrentPiece(createPiece(), 1.15);
     updateStats();
     checkGameOver();
+    saveGameState();
     draw();
     return true;
   }
@@ -818,6 +881,7 @@ export function createGameController(elements: GameControllerElements) {
     updateStats();
     draw();
     checkGameOver();
+    saveGameState();
     return { allowed: true };
   }
 
@@ -849,6 +913,12 @@ export function createGameController(elements: GameControllerElements) {
       weightedShake(12, 240);
       draw();
     }).allowed;
+  }
+
+  function requestNewGame(): void {
+    const confirmed = window.confirm('Start a new game? Your current progress will be lost.');
+    if (!confirmed) return;
+    newGame();
   }
 
   function updateHoverFromEvent(e: PointerEvent): void {
@@ -912,12 +982,17 @@ export function createGameController(elements: GameControllerElements) {
   window.addEventListener('pointercancel', cancelDrag);
   window.addEventListener('resize', handleResize);
   window.addEventListener('orientationchange', handleResize);
-  elements.newBtn.addEventListener('click', newGame);
+  elements.newBtn.addEventListener('click', requestNewGame);
   elements.againBtn.addEventListener('click', newGame);
   elements.rerollBtn.addEventListener('click', rerollPiece);
   elements.clearBoardBtn.addEventListener('click', clearBoardAction);
 
-  newGame();
+  const savedState = loadSavedGameState();
+  if (savedState) {
+    restoreGameState(savedState);
+  } else {
+    newGame();
+  }
 
   return {
     destroy() {
@@ -933,7 +1008,7 @@ export function createGameController(elements: GameControllerElements) {
       window.removeEventListener('pointercancel', cancelDrag);
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
-      elements.newBtn.removeEventListener('click', newGame);
+      elements.newBtn.removeEventListener('click', requestNewGame);
       elements.againBtn.removeEventListener('click', newGame);
       elements.rerollBtn.removeEventListener('click', rerollPiece);
       elements.clearBoardBtn.removeEventListener('click', clearBoardAction);

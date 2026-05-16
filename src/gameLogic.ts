@@ -29,6 +29,15 @@ export interface PlacedCell {
   placedValue: number;
 }
 
+export interface SavedGameStateV1 {
+  version: 1;
+  board: GameBoard;
+  piece: PieceState;
+  score: number;
+  moves: number;
+  gameOver: boolean;
+}
+
 export const FIELD_WEIGHTS: ReadonlyArray<readonly [CellBase, number]> = [
   [0, 0.38],
   [1, 0.4],
@@ -206,4 +215,84 @@ export function createInitialGame(rng: () => number = Math.random) {
     score: 0,
     moves: 0,
   };
+}
+
+function isCellBase(value: unknown): value is CellBase {
+  return value === 0 || value === 1 || value === 3 || value === 5 || value === 8;
+}
+
+function isCellCoord(value: unknown): value is CellCoord {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    typeof value[0] === 'number' &&
+    typeof value[1] === 'number' &&
+    Number.isFinite(value[0]) &&
+    Number.isFinite(value[1])
+  );
+}
+
+function isGameBoard(value: unknown): value is GameBoard {
+  return (
+    Array.isArray(value) &&
+    value.length === SIZE &&
+    value.every(row =>
+      Array.isArray(row) &&
+      row.length === SIZE &&
+      row.every(cell =>
+        cell &&
+        typeof cell === 'object' &&
+        isCellBase((cell as { base?: unknown }).base) &&
+        typeof (cell as { occupied?: unknown }).occupied === 'boolean' &&
+        ((cell as { placed?: unknown }).placed === null ||
+          typeof (cell as { placed?: unknown }).placed === 'number'),
+      ),
+    )
+  );
+}
+
+function isPieceState(value: unknown): value is PieceState {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    Array.isArray((value as { cells?: unknown }).cells) &&
+    Array.isArray((value as { values?: unknown }).values) &&
+    (value as { cells: unknown[] }).cells.length === 4 &&
+    (value as { values: unknown[] }).values.length === 4 &&
+    (value as { cells: unknown[] }).cells.every(isCellCoord) &&
+    (value as { values: unknown[] }).values.every(item => typeof item === 'number' && Number.isFinite(item))
+  );
+}
+
+export function serializeGameState(state: SavedGameStateV1): string {
+  return JSON.stringify(state);
+}
+
+export function deserializeGameState(raw: string): SavedGameStateV1 | null {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      (parsed as { version?: unknown }).version !== 1 ||
+      !isGameBoard((parsed as { board?: unknown }).board) ||
+      !isPieceState((parsed as { piece?: unknown }).piece) ||
+      typeof (parsed as { score?: unknown }).score !== 'number' ||
+      typeof (parsed as { moves?: unknown }).moves !== 'number' ||
+      typeof (parsed as { gameOver?: unknown }).gameOver !== 'boolean'
+    ) {
+      return null;
+    }
+
+    return {
+      version: 1,
+      board: (parsed as SavedGameStateV1).board,
+      piece: (parsed as SavedGameStateV1).piece,
+      score: (parsed as SavedGameStateV1).score,
+      moves: (parsed as SavedGameStateV1).moves,
+      gameOver: (parsed as SavedGameStateV1).gameOver,
+    };
+  } catch {
+    return null;
+  }
 }

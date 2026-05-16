@@ -137,6 +137,7 @@ export function createGameController(elements: GameControllerElements) {
   let activePointerId: number | null = null;
   let dragPointer: DragPointer | null = null;
   let dragAnchor: CellCoord = [0, 0];
+  let dragIsTouch = false;
   let fxParticles: Particle[] = [];
   let pieceReveal: PieceReveal | null = null;
   let shakeEffect: ShakeEffect | null = null;
@@ -420,6 +421,12 @@ export function createGameController(elements: GameControllerElements) {
     return Math.max(28, Math.round(block * 1.1));
   }
 
+  function getDragPreviewOffset(): number {
+    if (!dragIsTouch) return 0;
+    const block = Math.max(24, Math.min(52, Math.floor(Math.min(window.innerWidth, window.innerHeight) / 10)));
+    return Math.max(28, Math.round(block * 0.9));
+  }
+
   function getDragAnchorFromPreview(e: PointerEvent): CellCoord {
     const rect = elements.nextCanvas.getBoundingClientRect();
     const localX = e.clientX - rect.left;
@@ -447,7 +454,8 @@ export function createGameController(elements: GameControllerElements) {
 
   function updateHoverFromPointer(clientX: number, clientY: number): void {
     const lift = dragging ? getDragLift() : 0;
-    const point = getPointerCellAt(clientX, clientY - lift);
+    const previewOffset = dragging ? getDragPreviewOffset() : 0;
+    const point = getPointerCellAt(clientX, clientY - lift - previewOffset);
     if (!point.inside) {
       hover = null;
       return;
@@ -593,13 +601,14 @@ export function createGameController(elements: GameControllerElements) {
     const w = (maxX + 1) * block + pad * 2;
     const h = (maxY + 1) * block + pad * 2;
     const lift = getDragLift();
+    const previewOffset = getDragPreviewOffset();
     const anchorX = pad + dragAnchor[0] * block + block / 2;
     const anchorY = pad + dragAnchor[1] * block + block / 2;
 
     elements.dragCanvas.style.width = `${w}px`;
     elements.dragCanvas.style.height = `${h}px`;
     elements.dragCanvas.style.left = `${Math.round(dragPointer.x - anchorX)}px`;
-    elements.dragCanvas.style.top = `${Math.round(dragPointer.y - anchorY - lift)}px`;
+    elements.dragCanvas.style.top = `${Math.round(dragPointer.y - anchorY - lift - previewOffset)}px`;
 
     if (elements.dragCanvas.width !== Math.round(w * dpr) || elements.dragCanvas.height !== Math.round(h * dpr)) {
       elements.dragCanvas.width = Math.round(w * dpr);
@@ -650,9 +659,11 @@ export function createGameController(elements: GameControllerElements) {
     const pointerY = dragPointer?.y ?? dragRect.top;
     const lift = getDragLift();
     const left = pointerX;
-    let top = pointerY - lift - tipHeight - 10;
-    const below = top < 12;
-    if (below) {
+    const below = dragIsTouch;
+    let top = below
+      ? dragRect.bottom + 10
+      : pointerY - lift - tipHeight - 10;
+    if (!below && top < 12) {
       top = pointerY - lift + 10;
     }
     elements.tooltipEl.classList.toggle('below', below);
@@ -847,6 +858,7 @@ export function createGameController(elements: GameControllerElements) {
     if (gameOver) return;
     dragging = true;
     activePointerId = e.pointerId;
+    dragIsTouch = e.pointerType === 'touch';
     dragPointer = { x: e.clientX, y: e.clientY };
     dragAnchor = e.currentTarget === elements.nextCanvas ? getDragAnchorFromPreview(e) : [0, 0];
     updateHoverFromPointer(e.clientX, e.clientY);
@@ -872,6 +884,7 @@ export function createGameController(elements: GameControllerElements) {
     }
     dragging = false;
     activePointerId = null;
+    dragIsTouch = false;
     hover = null;
     dragPointer = null;
     draw();
@@ -881,6 +894,7 @@ export function createGameController(elements: GameControllerElements) {
   function cancelDrag(): void {
     dragging = false;
     activePointerId = null;
+    dragIsTouch = false;
     hover = null;
     dragPointer = null;
     draw();

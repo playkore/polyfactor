@@ -40,6 +40,7 @@ export interface SavedGameStateV1 {
   score: number;
   moves: number;
   gameOver: boolean;
+  rotationPaidForCurrentPiece?: boolean;
 }
 
 export const FIELD_WEIGHTS: ReadonlyArray<readonly [CellBase, number]> = [
@@ -176,8 +177,23 @@ export function canPlaceAnyPlacement(board: GameBoard, piece: PieceState): boole
   return false;
 }
 
-export function shouldShowGameOver(board: GameBoard, piece: PieceState, score: number): boolean {
-  return !canPlaceAnyPlacement(board, piece) && score < 10;
+export function shouldShowGameOver(
+  board: GameBoard,
+  piece: PieceState,
+  score: number,
+  rotationPaidForCurrentPiece = false,
+): boolean {
+  if (canPlaceAnyPlacement(board, piece)) return false;
+  if (score >= 10) return false;
+  if (score < 5 && !rotationPaidForCurrentPiece) return true;
+
+  let rotatedPiece = piece;
+  for (let index = 0; index < 3; index++) {
+    rotatedPiece = rotatePieceState(rotatedPiece);
+    if (canPlaceAnyPlacement(board, rotatedPiece)) return false;
+  }
+
+  return true;
 }
 
 export function computePlacementTotal(board: GameBoard, piece: PieceState, col: number, row: number): number {
@@ -309,7 +325,11 @@ export function deserializeGameState(raw: string): SavedGameStateV1 | null {
       !isPieceState((parsed as { piece?: unknown }).piece) ||
       typeof (parsed as { score?: unknown }).score !== 'number' ||
       typeof (parsed as { moves?: unknown }).moves !== 'number' ||
-      typeof (parsed as { gameOver?: unknown }).gameOver !== 'boolean'
+      typeof (parsed as { gameOver?: unknown }).gameOver !== 'boolean' ||
+      (
+        (parsed as { rotationPaidForCurrentPiece?: unknown }).rotationPaidForCurrentPiece !== undefined &&
+        typeof (parsed as { rotationPaidForCurrentPiece?: unknown }).rotationPaidForCurrentPiece !== 'boolean'
+      )
     ) {
       return null;
     }
@@ -322,6 +342,8 @@ export function deserializeGameState(raw: string): SavedGameStateV1 | null {
       score: (parsed as SavedGameStateV1).score,
       moves: (parsed as SavedGameStateV1).moves,
       gameOver: (parsed as SavedGameStateV1).gameOver,
+      rotationPaidForCurrentPiece:
+        (parsed as SavedGameStateV1).rotationPaidForCurrentPiece ?? false,
     };
   } catch {
     return null;

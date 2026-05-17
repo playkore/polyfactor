@@ -10,6 +10,7 @@ import {
   deserializeGameState,
   serializeGameState,
   placePiece,
+  rotatePieceState,
   shouldShowGameOver,
   type SavedGameStateV1,
   type BoardSize,
@@ -27,6 +28,7 @@ interface GameControllerElements {
   fxCanvas: HTMLCanvasElement;
   scoreEl: HTMLElement;
   movesEl: HTMLElement;
+  rotateBtn: HTMLButtonElement;
   rerollBtn: HTMLButtonElement;
   clearBoardBtn: HTMLButtonElement;
   newBtn: HTMLButtonElement;
@@ -141,6 +143,7 @@ export function createGameController(elements: GameControllerElements) {
   let currentBoardSize: BoardSize = DEFAULT_BOARD_SIZE;
   let board: GameBoard = createBoard(Math.random, currentBoardSize);
   let piece: PieceState = createPiece();
+  let rotationPaidForCurrentPiece = false;
   let score = 0;
   let moves = 0;
   let dragging = false;
@@ -164,6 +167,7 @@ export function createGameController(elements: GameControllerElements) {
       boardSize: currentBoardSize,
       board,
       piece,
+      rotationPaidForCurrentPiece,
       score,
       moves,
       gameOver,
@@ -409,12 +413,15 @@ export function createGameController(elements: GameControllerElements) {
   }
 
   function updateStoreButtons(): void {
+    elements.rotateBtn.disabled = !rotationPaidForCurrentPiece && score < 5;
+    elements.rotateBtn.textContent = rotationPaidForCurrentPiece ? 'Rotate free' : 'Rotate -5';
     elements.rerollBtn.disabled = score < 10;
     elements.clearBoardBtn.disabled = score < 100;
   }
 
   function setCurrentPiece(nextPiece: PieceState, revealStrength = 1): void {
     piece = nextPiece;
+    rotationPaidForCurrentPiece = false;
     dragging = false;
     dragPointer = null;
     dragAnchor = [0, 0];
@@ -432,6 +439,7 @@ export function createGameController(elements: GameControllerElements) {
     score = 0;
     moves = 0;
     piece = createPiece();
+    rotationPaidForCurrentPiece = false;
     dragging = false;
     dragPointer = null;
     hover = null;
@@ -451,6 +459,7 @@ export function createGameController(elements: GameControllerElements) {
     currentBoardSize = savedState.boardSize;
     board = savedState.board;
     piece = savedState.piece;
+    rotationPaidForCurrentPiece = savedState.rotationPaidForCurrentPiece ?? false;
     score = savedState.score;
     moves = savedState.moves;
     gameOver = savedState.gameOver;
@@ -847,7 +856,7 @@ export function createGameController(elements: GameControllerElements) {
   }
 
   function checkGameOver(): void {
-    gameOver = shouldShowGameOver(board, piece, score);
+    gameOver = shouldShowGameOver(board, piece, score, rotationPaidForCurrentPiece);
     if (gameOver) {
       elements.finalTextEl.textContent = `Final score: ${score}. Moves made: ${moves}.`;
       elements.overlayEl.classList.add('show');
@@ -890,6 +899,29 @@ export function createGameController(elements: GameControllerElements) {
     checkGameOver();
     saveGameState();
     return { allowed: true };
+  }
+
+  function rotateCurrentPiece(): boolean {
+    const applyRotation = (): void => {
+      const rotated = rotatePieceState(piece, { col: dragAnchor[0], row: dragAnchor[1] });
+      piece = { cells: rotated.cells, values: rotated.values };
+      dragAnchor = rotated.anchor ? [rotated.anchor.col, rotated.anchor.row] : [0, 0];
+      rotationPaidForCurrentPiece = true;
+      gameOver = false;
+      elements.overlayEl.classList.remove('show');
+      triggerPieceReveal(0.65);
+    };
+
+    if (rotationPaidForCurrentPiece) {
+      applyRotation();
+      updateStats();
+      draw();
+      checkGameOver();
+      saveGameState();
+      return true;
+    }
+
+    return spendScore(5, applyRotation).allowed;
   }
 
   function rerollPiece(): boolean {
@@ -1019,6 +1051,7 @@ export function createGameController(elements: GameControllerElements) {
   elements.settingsCloseBtn.addEventListener('click', closeSettings);
   elements.boardSizeSelect.addEventListener('change', changeBoardSize);
   elements.againBtn.addEventListener('click', playAgain);
+  elements.rotateBtn.addEventListener('click', rotateCurrentPiece);
   elements.rerollBtn.addEventListener('click', rerollPiece);
   elements.clearBoardBtn.addEventListener('click', clearBoardAction);
 
@@ -1048,6 +1081,7 @@ export function createGameController(elements: GameControllerElements) {
       elements.settingsCloseBtn.removeEventListener('click', closeSettings);
       elements.boardSizeSelect.removeEventListener('change', changeBoardSize);
       elements.againBtn.removeEventListener('click', playAgain);
+      elements.rotateBtn.removeEventListener('click', rotateCurrentPiece);
       elements.rerollBtn.removeEventListener('click', rerollPiece);
       elements.clearBoardBtn.removeEventListener('click', clearBoardAction);
       elements.root.style.transform = '';

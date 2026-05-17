@@ -204,14 +204,18 @@ canvas {
   margin-bottom: 2px;
 }
 
-.store-item {
+.store-actions {
   display: grid;
-  gap: 4px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
 }
 
-.store-item button {
+.store-actions button {
   width: 100%;
   min-height: 40px;
+  padding: 8px 4px;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 #nextCanvas {

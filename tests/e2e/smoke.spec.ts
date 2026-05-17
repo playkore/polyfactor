@@ -7,8 +7,11 @@ test('app mounts and exposes the core UI', async ({ page }) => {
   await expect(page.getByTestId('next-canvas')).toBeVisible();
   await expect(page.getByTestId('new-game-button')).toBeVisible();
   await expect(page.getByTestId('settings-button')).toBeVisible();
+  await expect(page.getByTestId('rotate-button')).toBeDisabled();
+  await expect(page.getByTestId('rotate-button')).toHaveText('Rotate -5');
   await expect(page.getByTestId('reroll-button')).toBeDisabled();
   await expect(page.getByTestId('clear-board-button')).toBeDisabled();
+  await expect(page.getByTestId('clear-board-button')).toHaveText('Clear -100');
   await expect(page.getByTestId('score')).toHaveText('0');
   await expect(page.getByTestId('moves')).toHaveText('0');
 

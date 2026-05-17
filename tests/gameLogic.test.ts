@@ -110,7 +110,7 @@ test('clearBoard returns a fresh empty board', () => {
   assert.equal(board[7]?.[7]?.occupied, false);
 });
 
-test('shouldShowGameOver stays false when reroll is affordable', () => {
+test('shouldShowGameOver stays false when reroll or rotation is affordable', () => {
   const board: GameBoard = Array.from({ length: SIZE }, () =>
     Array.from({ length: SIZE }, () => ({ base: 1 as const, occupied: true, placed: 1 })),
   );
@@ -119,9 +119,30 @@ test('shouldShowGameOver stays false when reroll is affordable', () => {
     values: [1, 3, 5, 8],
   };
 
+  assert.equal(shouldShowGameOver(board, piece, 4), true);
+  assert.equal(shouldShowGameOver(board, piece, 5), true);
   assert.equal(shouldShowGameOver(board, piece, 9), true);
   assert.equal(shouldShowGameOver(board, piece, 10), false);
   assert.equal(shouldShowGameOver(board, piece, 100), false);
+});
+
+
+test('shouldShowGameOver considers paid or affordable rotations', () => {
+  const board: GameBoard = Array.from({ length: SIZE }, () =>
+    Array.from({ length: SIZE }, () => ({ base: 1 as const, occupied: true, placed: 1 })),
+  );
+  board[0]![0] = { ...board[0]![0], occupied: false, placed: null };
+  board[1]![0] = { ...board[1]![0], occupied: false, placed: null };
+  board[2]![0] = { ...board[2]![0], occupied: false, placed: null };
+  board[3]![0] = { ...board[3]![0], occupied: false, placed: null };
+  const piece = {
+    cells: [[0, 0], [1, 0], [2, 0], [3, 0]],
+    values: [1, 3, 5, 8],
+  };
+
+  assert.equal(shouldShowGameOver(board, piece, 4), true);
+  assert.equal(shouldShowGameOver(board, piece, 5), false);
+  assert.equal(shouldShowGameOver(board, piece, 0, true), false);
 });
 
 test('serializeGameState round-trips a saved game snapshot', () => {
@@ -138,6 +159,7 @@ test('serializeGameState round-trips a saved game snapshot', () => {
     score: 42,
     moves: 7,
     gameOver: true,
+    rotationPaidForCurrentPiece: true,
   };
 
   const restored = deserializeGameState(serializeGameState(saved));

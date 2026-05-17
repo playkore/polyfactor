@@ -10,6 +10,7 @@ export default function App() {
   const fxRef = useRef<HTMLCanvasElement | null>(null);
   const scoreRef = useRef<HTMLSpanElement | null>(null);
   const movesRef = useRef<HTMLSpanElement | null>(null);
+  const rotateRef = useRef<HTMLButtonElement | null>(null);
   const rerollRef = useRef<HTMLButtonElement | null>(null);
   const clearRef = useRef<HTMLButtonElement | null>(null);
   const newRef = useRef<HTMLButtonElement | null>(null);
@@ -50,6 +51,7 @@ export default function App() {
     const fxCanvas = fxRef.current;
     const scoreEl = scoreRef.current;
     const movesEl = movesRef.current;
+    const rotateBtn = rotateRef.current;
     const rerollBtn = rerollRef.current;
     const clearBoardBtn = clearRef.current;
     const newBtn = newRef.current;
@@ -70,6 +72,7 @@ export default function App() {
       !fxCanvas ||
       !scoreEl ||
       !movesEl ||
+      !rotateBtn ||
       !rerollBtn ||
       !clearBoardBtn ||
       !newBtn ||
@@ -93,6 +96,7 @@ export default function App() {
       fxCanvas,
       scoreEl,
       movesEl,
+      rotateBtn,
       rerollBtn,
       clearBoardBtn,
       newBtn,
@@ -147,11 +151,10 @@ export default function App() {
 
             <div className="store-box">
               <div className="store-title">Store</div>
-              <div className="store-item">
+              <div className="store-actions">
+                <button ref={rotateRef} data-testid="rotate-button">Rotate -5</button>
                 <button ref={rerollRef} data-testid="reroll-button">Reroll -10</button>
-              </div>
-              <div className="store-item">
-                <button ref={clearRef} data-testid="clear-board-button">Clear board -100</button>
+                <button ref={clearRef} data-testid="clear-board-button">Clear -100</button>
               </div>
             </div>
           </div>

@@ -1,18 +1,22 @@
 import {
+  BASE_STORE_COSTS,
   BOARD_SIZES,
   DEFAULT_BOARD_SIZE,
   VALUE_STYLES,
   canPlaceAt,
   clearBoard as createClearedBoard,
   computePlacementTotal,
+  increaseStoreCost,
   createBoard,
   createPiece,
   deserializeGameState,
   serializeGameState,
   placePiece,
   rotatePieceState,
+  roundStoreCost,
   shouldShowGameOver,
   type SavedGameStateV1,
+  type StoreCosts,
   type BoardSize,
   type CellCoord,
   type GameBoard,
@@ -102,6 +106,8 @@ interface SpendResult {
   allowed: boolean;
 }
 
+type StoreAction = keyof StoreCosts;
+
 const STORAGE_KEY = 'polyfactor.saved-game.v1';
 
 function resizeCanvas(canvas: HTMLCanvasElement, logicalSize: number | null = null): boolean {
@@ -144,6 +150,7 @@ export function createGameController(elements: GameControllerElements) {
   let board: GameBoard = createBoard(Math.random, currentBoardSize);
   let piece: PieceState = createPiece();
   let rotationPaidForCurrentPiece = false;
+  let storeCosts: StoreCosts = { ...BASE_STORE_COSTS };
   let score = 0;
   let moves = 0;
   let dragging = false;
@@ -168,6 +175,7 @@ export function createGameController(elements: GameControllerElements) {
       board,
       piece,
       rotationPaidForCurrentPiece,
+      storeCosts,
       score,
       moves,
       gameOver,
@@ -407,16 +415,22 @@ export function createGameController(elements: GameControllerElements) {
   }
 
   function updateStats(): void {
-    elements.scoreEl.textContent = String(score);
+    elements.scoreEl.textContent = String(Math.round(score));
     elements.movesEl.textContent = String(moves);
     updateStoreButtons();
   }
 
   function updateStoreButtons(): void {
-    elements.rotateBtn.disabled = !rotationPaidForCurrentPiece && score < 5;
-    elements.rotateBtn.textContent = rotationPaidForCurrentPiece ? 'Rotate free' : 'Rotate -5';
-    elements.rerollBtn.disabled = score < 10;
-    elements.clearBoardBtn.disabled = score < 100;
+    const rotateCost = roundStoreCost(storeCosts.rotate);
+    const rerollCost = roundStoreCost(storeCosts.reroll);
+    const clearBoardCost = roundStoreCost(storeCosts.clearBoard);
+
+    elements.rotateBtn.disabled = !rotationPaidForCurrentPiece && score < rotateCost;
+    elements.rotateBtn.textContent = rotationPaidForCurrentPiece ? 'Rotate free' : `Rotate -${rotateCost}`;
+    elements.rerollBtn.disabled = score < rerollCost;
+    elements.rerollBtn.textContent = `Reroll -${rerollCost}`;
+    elements.clearBoardBtn.disabled = score < clearBoardCost;
+    elements.clearBoardBtn.textContent = `Clear -${clearBoardCost}`;
   }
 
   function setCurrentPiece(nextPiece: PieceState, revealStrength = 1): void {
@@ -440,6 +454,7 @@ export function createGameController(elements: GameControllerElements) {
     moves = 0;
     piece = createPiece();
     rotationPaidForCurrentPiece = false;
+    storeCosts = { ...BASE_STORE_COSTS };
     dragging = false;
     dragPointer = null;
     hover = null;
@@ -460,6 +475,7 @@ export function createGameController(elements: GameControllerElements) {
     board = savedState.board;
     piece = savedState.piece;
     rotationPaidForCurrentPiece = savedState.rotationPaidForCurrentPiece ?? false;
+    storeCosts = savedState.storeCosts ? { ...savedState.storeCosts } : { ...BASE_STORE_COSTS };
     score = savedState.score;
     moves = savedState.moves;
     gameOver = savedState.gameOver;
@@ -856,9 +872,9 @@ export function createGameController(elements: GameControllerElements) {
   }
 
   function checkGameOver(): void {
-    gameOver = shouldShowGameOver(board, piece, score, rotationPaidForCurrentPiece);
+    gameOver = shouldShowGameOver(board, piece, score, rotationPaidForCurrentPiece, storeCosts);
     if (gameOver) {
-      elements.finalTextEl.textContent = `Final score: ${score}. Moves made: ${moves}.`;
+      elements.finalTextEl.textContent = `Final score: ${Math.round(score)}. Moves made: ${moves}.`;
       elements.overlayEl.classList.add('show');
     } else {
       elements.finalTextEl.textContent = '';
@@ -888,9 +904,14 @@ export function createGameController(elements: GameControllerElements) {
     return true;
   }
 
-  function spendScore(cost: number, action: () => void): SpendResult {
+  function spendScore(actionName: StoreAction, action: () => void): SpendResult {
+    const cost = roundStoreCost(storeCosts[actionName]);
     if (score < cost) return { allowed: false };
     score -= cost;
+    storeCosts = {
+      ...storeCosts,
+      [actionName]: increaseStoreCost(storeCosts[actionName]),
+    };
     action();
     gameOver = false;
     elements.overlayEl.classList.remove('show');
@@ -921,18 +942,18 @@ export function createGameController(elements: GameControllerElements) {
       return true;
     }
 
-    return spendScore(5, applyRotation).allowed;
+    return spendScore('rotate', applyRotation).allowed;
   }
 
   function rerollPiece(): boolean {
-    return spendScore(10, () => {
+    return spendScore('reroll', () => {
       spawnPreviewBurst(elements.nextCanvas, piece.cells, 1.2);
       setCurrentPiece(createPiece(), 1.4);
     }).allowed;
   }
 
   function clearBoardAction(): boolean {
-    return spendScore(100, () => {
+    return spendScore('clearBoard', () => {
       const occupiedCells: PlacedCell[] = [];
       for (let row = 0; row < currentBoardSize; row++) {
         for (let col = 0; col < currentBoardSize; col++) {

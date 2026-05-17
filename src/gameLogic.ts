@@ -32,6 +32,12 @@ export interface PlacedCell {
   placedValue: number;
 }
 
+export interface StoreCosts {
+  rotate: number;
+  reroll: number;
+  clearBoard: number;
+}
+
 export interface SavedGameStateV1 {
   version: 1;
   boardSize: BoardSize;
@@ -41,6 +47,7 @@ export interface SavedGameStateV1 {
   moves: number;
   gameOver: boolean;
   rotationPaidForCurrentPiece?: boolean;
+  storeCosts?: StoreCosts;
 }
 
 export const FIELD_WEIGHTS: ReadonlyArray<readonly [CellBase, number]> = [
@@ -50,6 +57,22 @@ export const FIELD_WEIGHTS: ReadonlyArray<readonly [CellBase, number]> = [
   [5, 0.055],
   [8, 0.015],
 ];
+
+export const BASE_STORE_COSTS: StoreCosts = {
+  rotate: 5,
+  reroll: 10,
+  clearBoard: 100,
+};
+
+export const STORE_COST_MULTIPLIER = 1.15;
+
+export function roundStoreCost(cost: number): number {
+  return Math.round(cost);
+}
+
+export function increaseStoreCost(cost: number): number {
+  return cost * STORE_COST_MULTIPLIER;
+}
 
 export const PIECE_WEIGHTS: ReadonlyArray<readonly [number, number]> = [
   [0, 0.18],
@@ -182,10 +205,15 @@ export function shouldShowGameOver(
   piece: PieceState,
   score: number,
   rotationPaidForCurrentPiece = false,
+  storeCosts: StoreCosts = BASE_STORE_COSTS,
 ): boolean {
   if (canPlaceAnyPlacement(board, piece)) return false;
-  if (score >= 10) return false;
-  if (score < 5 && !rotationPaidForCurrentPiece) return true;
+
+  if (score >= Math.min(roundStoreCost(storeCosts.reroll), roundStoreCost(storeCosts.clearBoard))) {
+    return false;
+  }
+
+  if (score < roundStoreCost(storeCosts.rotate) && !rotationPaidForCurrentPiece) return true;
 
   let rotatedPiece = piece;
   for (let index = 0; index < 3; index++) {
@@ -286,6 +314,22 @@ function isGameBoard(value: unknown, boardSize: BoardSize): value is GameBoard {
   );
 }
 
+function isStoreCosts(value: unknown): value is StoreCosts {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    typeof (value as { rotate?: unknown }).rotate === 'number' &&
+    Number.isFinite((value as { rotate?: unknown }).rotate) &&
+    (value as { rotate: number }).rotate > 0 &&
+    typeof (value as { reroll?: unknown }).reroll === 'number' &&
+    Number.isFinite((value as { reroll?: unknown }).reroll) &&
+    (value as { reroll: number }).reroll > 0 &&
+    typeof (value as { clearBoard?: unknown }).clearBoard === 'number' &&
+    Number.isFinite((value as { clearBoard?: unknown }).clearBoard) &&
+    (value as { clearBoard: number }).clearBoard > 0
+  );
+}
+
 function isPieceState(value: unknown): value is PieceState {
   return (
     value !== null &&
@@ -329,6 +373,10 @@ export function deserializeGameState(raw: string): SavedGameStateV1 | null {
       (
         (parsed as { rotationPaidForCurrentPiece?: unknown }).rotationPaidForCurrentPiece !== undefined &&
         typeof (parsed as { rotationPaidForCurrentPiece?: unknown }).rotationPaidForCurrentPiece !== 'boolean'
+      ) ||
+      (
+        (parsed as { storeCosts?: unknown }).storeCosts !== undefined &&
+        !isStoreCosts((parsed as { storeCosts?: unknown }).storeCosts)
       )
     ) {
       return null;
@@ -344,6 +392,7 @@ export function deserializeGameState(raw: string): SavedGameStateV1 | null {
       gameOver: (parsed as SavedGameStateV1).gameOver,
       rotationPaidForCurrentPiece:
         (parsed as SavedGameStateV1).rotationPaidForCurrentPiece ?? false,
+      storeCosts: (parsed as SavedGameStateV1).storeCosts ?? { ...BASE_STORE_COSTS },
     };
   } catch {
     return null;

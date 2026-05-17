@@ -68,10 +68,16 @@ test('rotatePieceState also rotates the drag anchor', () => {
   assert.deepEqual(rotated.anchor, { col: 0, row: 1 });
 });
 
-test('createBoard builds an 8x8 board', () => {
+test('createBoard builds the default 8x8 board', () => {
   const board = createBoard(constantRng([0, 0.5, 0.9]));
   assert.equal(board.length, SIZE);
   assert.equal(board[0]?.length, SIZE);
+});
+
+test('createBoard supports smaller board sizes', () => {
+  const board = createBoard(constantRng([0, 0.5, 0.9]), 4);
+  assert.equal(board.length, 4);
+  assert.equal(board[0]?.length, 4);
 });
 
 test('createPiece returns four cells and four values', () => {
@@ -126,6 +132,7 @@ test('serializeGameState round-trips a saved game snapshot', () => {
 
   const saved: SavedGameStateV1 = {
     version: 1,
+    boardSize: 8,
     board,
     piece,
     score: 42,
@@ -136,6 +143,48 @@ test('serializeGameState round-trips a saved game snapshot', () => {
   const restored = deserializeGameState(serializeGameState(saved));
 
   assert.deepEqual(restored, saved);
+});
+
+test('deserializeGameState restores a saved board size', () => {
+  const board = createBoard(constantRng([0, 0.5, 0.9]), 4);
+  const piece = createPiece(constantRng([0, 0.05, 0.25, 0.75, 0.95]));
+
+  const restored = deserializeGameState(serializeGameState({
+    version: 1,
+    boardSize: 4,
+    board,
+    piece,
+    score: 0,
+    moves: 0,
+    gameOver: false,
+  }));
+
+  assert.equal(restored?.boardSize, 4);
+  assert.equal(restored?.board.length, 4);
+});
+
+test('deserializeGameState rejects an unsupported board size', () => {
+  assert.equal(deserializeGameState(JSON.stringify({
+    version: 1,
+    boardSize: 5,
+    board: createBoard(constantRng([0, 0.5, 0.9])),
+    piece: createPiece(constantRng([0, 0.05, 0.25, 0.75, 0.95])),
+    score: 0,
+    moves: 0,
+    gameOver: false,
+  })), null);
+});
+
+test('deserializeGameState rejects a snapshot with a mismatched board size', () => {
+  assert.equal(deserializeGameState(JSON.stringify({
+    version: 1,
+    boardSize: 4,
+    board: createBoard(constantRng([0, 0.5, 0.9]), 8),
+    piece: createPiece(constantRng([0, 0.05, 0.25, 0.75, 0.95])),
+    score: 0,
+    moves: 0,
+    gameOver: false,
+  })), null);
 });
 
 test('deserializeGameState rejects invalid snapshots', () => {

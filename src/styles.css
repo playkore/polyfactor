@@ -206,15 +206,15 @@ canvas {
 
 .store-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 5px;
+  grid-template-columns: 1fr;
+  gap: 6px;
 }
 
 .store-actions button {
   width: 100%;
   min-height: 40px;
-  padding: 8px 4px;
-  font-size: 11px;
+  padding: 8px 6px;
+  font-size: 12px;
   white-space: nowrap;
 }
 

@@ -13,6 +13,8 @@ import {
   shouldShowGameOver,
   rotatePieceState,
   SIZE,
+  increaseStoreCost,
+  roundStoreCost,
   type SavedGameStateV1,
   type GameBoard,
 } from '../src/gameLogic';
@@ -110,6 +112,14 @@ test('clearBoard returns a fresh empty board', () => {
   assert.equal(board[7]?.[7]?.occupied, false);
 });
 
+test('store costs keep fractional increases but round for display and spending', () => {
+  const nextRotateCost = increaseStoreCost(5);
+
+  assert.equal(nextRotateCost, 5.75);
+  assert.equal(roundStoreCost(nextRotateCost), 6);
+  assert.equal(roundStoreCost(increaseStoreCost(nextRotateCost)), 7);
+});
+
 test('shouldShowGameOver stays false when reroll or rotation is affordable', () => {
   const board: GameBoard = Array.from({ length: SIZE }, () =>
     Array.from({ length: SIZE }, () => ({ base: 1 as const, occupied: true, placed: 1 })),
@@ -123,6 +133,9 @@ test('shouldShowGameOver stays false when reroll or rotation is affordable', () 
   assert.equal(shouldShowGameOver(board, piece, 5), true);
   assert.equal(shouldShowGameOver(board, piece, 9), true);
   assert.equal(shouldShowGameOver(board, piece, 10), false);
+  assert.equal(shouldShowGameOver(board, piece, 12, false, { rotate: 5, reroll: 12.4, clearBoard: 100 }), false);
+  assert.equal(shouldShowGameOver(board, piece, 12, false, { rotate: 5, reroll: 12.5, clearBoard: 100 }), true);
+  assert.equal(shouldShowGameOver(board, piece, 13, false, { rotate: 5, reroll: 12.5, clearBoard: 100 }), false);
   assert.equal(shouldShowGameOver(board, piece, 100), false);
 });
 
@@ -160,6 +173,7 @@ test('serializeGameState round-trips a saved game snapshot', () => {
     moves: 7,
     gameOver: true,
     rotationPaidForCurrentPiece: true,
+    storeCosts: { rotate: 5.75, reroll: 11.5, clearBoard: 115 },
   };
 
   const restored = deserializeGameState(serializeGameState(saved));

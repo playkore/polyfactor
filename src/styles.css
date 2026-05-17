@@ -43,7 +43,9 @@ body {
 .top-bar {
   width: min(100%, 430px);
   margin: 0 auto 12px;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .top-bar button {
@@ -262,6 +264,7 @@ button:disabled {
   display: none;
   place-items: center;
   padding: 20px;
+  z-index: 40;
 }
 
 .overlay.show {
@@ -288,6 +291,28 @@ button:disabled {
   margin: 0;
   line-height: 1.35;
   color: var(--muted);
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  font-weight: 800;
+}
+
+select {
+  appearance: none;
+  border: 3px solid var(--line);
+  background: #fff8df;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 800;
+  padding: 10px 12px;
+  min-height: 48px;
+  box-shadow: 4px 4px 0 #000;
+}
+
+.settings-note {
+  font-size: 12px;
 }
 
 @media (max-width: 720px) {

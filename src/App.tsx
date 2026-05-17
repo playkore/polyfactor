@@ -13,6 +13,10 @@ export default function App() {
   const rerollRef = useRef<HTMLButtonElement | null>(null);
   const clearRef = useRef<HTMLButtonElement | null>(null);
   const newRef = useRef<HTMLButtonElement | null>(null);
+  const settingsRef = useRef<HTMLButtonElement | null>(null);
+  const settingsOverlayRef = useRef<HTMLDivElement | null>(null);
+  const settingsCloseRef = useRef<HTMLButtonElement | null>(null);
+  const boardSizeRef = useRef<HTMLSelectElement | null>(null);
   const againRef = useRef<HTMLButtonElement | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -49,6 +53,10 @@ export default function App() {
     const rerollBtn = rerollRef.current;
     const clearBoardBtn = clearRef.current;
     const newBtn = newRef.current;
+    const settingsBtn = settingsRef.current;
+    const settingsOverlayEl = settingsOverlayRef.current;
+    const settingsCloseBtn = settingsCloseRef.current;
+    const boardSizeSelect = boardSizeRef.current;
     const againBtn = againRef.current;
     const tooltipEl = tooltipRef.current;
     const overlayEl = overlayRef.current;
@@ -65,6 +73,10 @@ export default function App() {
       !rerollBtn ||
       !clearBoardBtn ||
       !newBtn ||
+      !settingsBtn ||
+      !settingsOverlayEl ||
+      !settingsCloseBtn ||
+      !boardSizeSelect ||
       !againBtn ||
       !tooltipEl ||
       !overlayEl ||
@@ -84,6 +96,10 @@ export default function App() {
       rerollBtn,
       clearBoardBtn,
       newBtn,
+      settingsBtn,
+      settingsOverlayEl,
+      settingsCloseBtn,
+      boardSizeSelect,
       againBtn,
       tooltipEl,
       overlayEl,
@@ -97,6 +113,7 @@ export default function App() {
     <>
       <div className="top-bar">
         <button ref={newRef} data-testid="new-game-button">New game</button>
+        <button ref={settingsRef} data-testid="settings-button">Settings</button>
       </div>
 
       <main className="game" ref={rootRef}>
@@ -142,6 +159,22 @@ export default function App() {
       </main>
 
       <div className="tooltip" ref={tooltipRef} data-testid="tooltip" />
+      <div className="overlay settings-overlay" ref={settingsOverlayRef} data-testid="settings-screen">
+        <div className="modal settings-modal">
+          <h2>Settings</h2>
+          <label className="field">
+            <span>Board size</span>
+            <select ref={boardSizeRef} data-testid="board-size-select" aria-label="Board size">
+              <option value="4">4x4</option>
+              <option value="6">6x6</option>
+              <option value="8">8x8</option>
+            </select>
+          </label>
+          <p className="settings-note">Changing the board size starts a new game.</p>
+          <button ref={settingsCloseRef} data-testid="settings-close-button">Close</button>
+        </div>
+      </div>
+
       <div className="overlay" ref={overlayRef} data-testid="game-over-overlay">
         <div className="modal">
           <h2>Game over</h2>

@@ -1,4 +1,7 @@
-export const SIZE = 8;
+export const BOARD_SIZES = [4, 6, 8] as const;
+export type BoardSize = (typeof BOARD_SIZES)[number];
+export const DEFAULT_BOARD_SIZE: BoardSize = 8;
+export const SIZE = DEFAULT_BOARD_SIZE;
 
 export type CellBase = 0 | 1 | 3 | 5 | 8;
 export type CellCoord = readonly [number, number];
@@ -31,6 +34,7 @@ export interface PlacedCell {
 
 export interface SavedGameStateV1 {
   version: 1;
+  boardSize: BoardSize;
   board: GameBoard;
   piece: PieceState;
   score: number;
@@ -125,9 +129,9 @@ export function rotatePieceState(piece: PieceState, anchor: { col: number; row: 
   };
 }
 
-export function createBoard(rng: () => number = Math.random): GameBoard {
-  return Array.from({ length: SIZE }, () =>
-    Array.from({ length: SIZE }, () => ({
+export function createBoard(rng: () => number = Math.random, boardSize: BoardSize = DEFAULT_BOARD_SIZE): GameBoard {
+  return Array.from({ length: boardSize }, () =>
+    Array.from({ length: boardSize }, () => ({
       base: weightedPick(FIELD_WEIGHTS, rng),
       occupied: false,
       placed: null,
@@ -147,19 +151,25 @@ export function cloneBoard(board: GameBoard): GameBoard {
   return board.map(row => row.map(cell => ({ ...cell })));
 }
 
+function getBoardSize(board: GameBoard): number {
+  return board.length || DEFAULT_BOARD_SIZE;
+}
+
 export function canPlaceAt(board: GameBoard, cells: CellCoord[], col: number, row: number): boolean {
+  const boardSize = getBoardSize(board);
   for (const [x, y] of cells) {
     const c = col + x;
     const r = row + y;
-    if (c < 0 || c >= SIZE || r < 0 || r >= SIZE) return false;
+    if (c < 0 || c >= boardSize || r < 0 || r >= boardSize) return false;
     if (board[r]?.[c]?.occupied) return false;
   }
   return true;
 }
 
 export function canPlaceAnyPlacement(board: GameBoard, piece: PieceState): boolean {
-  for (let row = 0; row < SIZE; row++) {
-    for (let col = 0; col < SIZE; col++) {
+  const boardSize = getBoardSize(board);
+  for (let row = 0; row < boardSize; row++) {
+    for (let col = 0; col < boardSize; col++) {
       if (canPlaceAt(board, piece.cells, col, row)) return true;
     }
   }
@@ -171,10 +181,11 @@ export function shouldShowGameOver(board: GameBoard, piece: PieceState, score: n
 }
 
 export function computePlacementTotal(board: GameBoard, piece: PieceState, col: number, row: number): number {
+  const boardSize = getBoardSize(board);
   return piece.cells.reduce((total, [x, y], index) => {
     const c = col + x;
     const r = row + y;
-    if (c < 0 || c >= SIZE || r < 0 || r >= SIZE) return total;
+    if (c < 0 || c >= boardSize || r < 0 || r >= boardSize) return total;
     const cell = board[r]?.[c];
     if (!cell) return total;
     return total + cell.base * (piece.values[index] ?? 0);
@@ -208,13 +219,13 @@ export function placePiece(
   return { board: nextBoard, gained, placedCells };
 }
 
-export function clearBoard(rng: () => number = Math.random): GameBoard {
-  return createBoard(rng);
+export function clearBoard(rng: () => number = Math.random, boardSize: BoardSize = DEFAULT_BOARD_SIZE): GameBoard {
+  return createBoard(rng, boardSize);
 }
 
-export function createInitialGame(rng: () => number = Math.random) {
+export function createInitialGame(rng: () => number = Math.random, boardSize: BoardSize = DEFAULT_BOARD_SIZE) {
   return {
-    board: createBoard(rng),
+    board: createBoard(rng, boardSize),
     piece: createPiece(rng),
     score: 0,
     moves: 0,
@@ -236,13 +247,17 @@ function isCellCoord(value: unknown): value is CellCoord {
   );
 }
 
-function isGameBoard(value: unknown): value is GameBoard {
+export function isBoardSize(value: unknown): value is BoardSize {
+  return BOARD_SIZES.includes(value as BoardSize);
+}
+
+function isGameBoard(value: unknown, boardSize: BoardSize): value is GameBoard {
   return (
     Array.isArray(value) &&
-    value.length === SIZE &&
+    value.length === boardSize &&
     value.every(row =>
       Array.isArray(row) &&
-      row.length === SIZE &&
+      row.length === boardSize &&
       row.every(cell =>
         cell &&
         typeof cell === 'object' &&
@@ -278,8 +293,19 @@ export function deserializeGameState(raw: string): SavedGameStateV1 | null {
     if (
       !parsed ||
       typeof parsed !== 'object' ||
-      (parsed as { version?: unknown }).version !== 1 ||
-      !isGameBoard((parsed as { board?: unknown }).board) ||
+      (parsed as { version?: unknown }).version !== 1
+    ) {
+      return null;
+    }
+
+    const rawBoardSize = (parsed as { boardSize?: unknown }).boardSize;
+    if (rawBoardSize !== undefined && !isBoardSize(rawBoardSize)) {
+      return null;
+    }
+    const boardSize = isBoardSize(rawBoardSize) ? rawBoardSize : DEFAULT_BOARD_SIZE;
+
+    if (
+      !isGameBoard((parsed as { board?: unknown }).board, boardSize) ||
       !isPieceState((parsed as { piece?: unknown }).piece) ||
       typeof (parsed as { score?: unknown }).score !== 'number' ||
       typeof (parsed as { moves?: unknown }).moves !== 'number' ||
@@ -290,6 +316,7 @@ export function deserializeGameState(raw: string): SavedGameStateV1 | null {
 
     return {
       version: 1,
+      boardSize,
       board: (parsed as SavedGameStateV1).board,
       piece: (parsed as SavedGameStateV1).piece,
       score: (parsed as SavedGameStateV1).score,

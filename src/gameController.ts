@@ -1,5 +1,6 @@
 import {
-  SIZE,
+  BOARD_SIZES,
+  DEFAULT_BOARD_SIZE,
   VALUE_STYLES,
   canPlaceAt,
   clearBoard as createClearedBoard,
@@ -11,6 +12,7 @@ import {
   placePiece,
   shouldShowGameOver,
   type SavedGameStateV1,
+  type BoardSize,
   type CellCoord,
   type GameBoard,
   type PieceState,
@@ -28,6 +30,10 @@ interface GameControllerElements {
   rerollBtn: HTMLButtonElement;
   clearBoardBtn: HTMLButtonElement;
   newBtn: HTMLButtonElement;
+  settingsBtn: HTMLButtonElement;
+  settingsOverlayEl: HTMLDivElement;
+  settingsCloseBtn: HTMLButtonElement;
+  boardSizeSelect: HTMLSelectElement;
   againBtn: HTMLButtonElement;
   tooltipEl: HTMLDivElement;
   overlayEl: HTMLDivElement;
@@ -113,8 +119,8 @@ function setCanvasTransform(ctx: CanvasRenderingContext2D): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-function getBoundingCellSize(canvas: HTMLCanvasElement): number {
-  return canvas.width / SIZE;
+function getBoundingCellSize(canvas: HTMLCanvasElement, boardSize: BoardSize): number {
+  return canvas.width / boardSize;
 }
 
 export function createGameController(elements: GameControllerElements) {
@@ -132,7 +138,8 @@ export function createGameController(elements: GameControllerElements) {
   const dragCtx = dctx;
   const fxCtx = fctx;
 
-  let board: GameBoard = createBoard();
+  let currentBoardSize: BoardSize = DEFAULT_BOARD_SIZE;
+  let board: GameBoard = createBoard(Math.random, currentBoardSize);
   let piece: PieceState = createPiece();
   let score = 0;
   let moves = 0;
@@ -154,6 +161,7 @@ export function createGameController(elements: GameControllerElements) {
   function buildSavedState(): SavedGameStateV1 {
     return {
       version: 1,
+      boardSize: currentBoardSize,
       board,
       piece,
       score,
@@ -268,7 +276,7 @@ export function createGameController(elements: GameControllerElements) {
     let centerX = 0;
     let centerY = 0;
     const rect = elements.boardCanvas.getBoundingClientRect();
-    const s = rect.width / SIZE;
+    const s = rect.width / currentBoardSize;
 
     for (const cell of cells) {
       const color = VALUE_STYLES[cell.base].fg;
@@ -303,7 +311,7 @@ export function createGameController(elements: GameControllerElements) {
 
   function spawnBoardClearParticles(occupiedCells: PlacedCell[]): void {
     const rect = elements.boardCanvas.getBoundingClientRect();
-    const s = rect.width / SIZE;
+    const s = rect.width / currentBoardSize;
     const items: Particle[] = [];
 
     for (const cell of occupiedCells) {
@@ -415,11 +423,12 @@ export function createGameController(elements: GameControllerElements) {
   }
 
   function regenerateBoard(): void {
-    board = createClearedBoard();
+    board = createClearedBoard(Math.random, currentBoardSize);
   }
 
-  function newGame(): void {
-    board = createBoard();
+  function newGame(boardSize: BoardSize = currentBoardSize): void {
+    currentBoardSize = boardSize;
+    board = createBoard(Math.random, currentBoardSize);
     score = 0;
     moves = 0;
     piece = createPiece();
@@ -428,7 +437,9 @@ export function createGameController(elements: GameControllerElements) {
     hover = null;
     gameOver = false;
     elements.overlayEl.classList.remove('show');
+    elements.settingsOverlayEl.classList.remove('show');
     triggerPieceReveal(1.2);
+    updateBoardSizeUI();
     updateStats();
     resizeCanvases();
     checkGameOver();
@@ -437,6 +448,7 @@ export function createGameController(elements: GameControllerElements) {
   }
 
   function restoreGameState(savedState: SavedGameStateV1): void {
+    currentBoardSize = savedState.boardSize;
     board = savedState.board;
     piece = savedState.piece;
     score = savedState.score;
@@ -448,6 +460,7 @@ export function createGameController(elements: GameControllerElements) {
     activePointerId = null;
     dragIsTouch = false;
     triggerPieceReveal(1);
+    updateBoardSizeUI();
     updateStats();
     resizeCanvases();
     checkGameOver();
@@ -461,8 +474,8 @@ export function createGameController(elements: GameControllerElements) {
     const x = ((clientX - rect.left) / rect.width) * elements.boardCanvas.width;
     const y = ((clientY - rect.top) / rect.height) * elements.boardCanvas.height;
     return {
-      col: Math.floor(x / getBoundingCellSize(elements.boardCanvas)),
-      row: Math.floor(y / getBoundingCellSize(elements.boardCanvas)),
+      col: Math.floor(x / getBoundingCellSize(elements.boardCanvas, currentBoardSize)),
+      row: Math.floor(y / getBoundingCellSize(elements.boardCanvas, currentBoardSize)),
       inside,
     };
   }
@@ -536,11 +549,11 @@ export function createGameController(elements: GameControllerElements) {
   }
 
   function drawBoard(): void {
-    const size = getBoundingCellSize(elements.boardCanvas);
+    const size = getBoundingCellSize(elements.boardCanvas, currentBoardSize);
     boardCtx.clearRect(0, 0, elements.boardCanvas.width, elements.boardCanvas.height);
 
-    for (let row = 0; row < SIZE; row++) {
-      for (let col = 0; col < SIZE; col++) {
+    for (let row = 0; row < currentBoardSize; row++) {
+      for (let col = 0; col < currentBoardSize; col++) {
         const x = col * size;
         const y = row * size;
         const cell = board[row]?.[col];
@@ -561,7 +574,7 @@ export function createGameController(elements: GameControllerElements) {
   function drawGhost(): void {
     const currentHover = hover;
     if (!currentHover || !dragging) return;
-    const size = getBoundingCellSize(elements.boardCanvas);
+    const size = getBoundingCellSize(elements.boardCanvas, currentBoardSize);
     const fill = currentHover.valid ? '#b9d58b' : '#d88d7c';
     const outline = currentHover.valid ? '#314d19' : '#6b1e16';
 
@@ -570,7 +583,7 @@ export function createGameController(elements: GameControllerElements) {
     piece.cells.forEach(([x, y], index) => {
       const c = currentHover.col + x;
       const r = currentHover.row + y;
-      if (c < 0 || c >= SIZE || r < 0 || r >= SIZE) return;
+      if (c < 0 || c >= currentBoardSize || r < 0 || r >= currentBoardSize) return;
       const px = c * size;
       const py = r * size;
       const base = board[r]?.[c]?.base ?? 0;
@@ -889,8 +902,8 @@ export function createGameController(elements: GameControllerElements) {
   function clearBoardAction(): boolean {
     return spendScore(100, () => {
       const occupiedCells: PlacedCell[] = [];
-      for (let row = 0; row < SIZE; row++) {
-        for (let col = 0; col < SIZE; col++) {
+      for (let row = 0; row < currentBoardSize; row++) {
+        for (let col = 0; col < currentBoardSize; col++) {
           const cell = board[row]?.[col];
           if (cell?.occupied) {
             occupiedCells.push({
@@ -913,6 +926,30 @@ export function createGameController(elements: GameControllerElements) {
     const confirmed = window.confirm('Start a new game? Your current progress will be lost.');
     if (!confirmed) return;
     newGame();
+  }
+
+  function updateBoardSizeUI(): void {
+    elements.boardSizeSelect.value = String(currentBoardSize);
+    elements.boardCanvas.setAttribute('aria-label', `${currentBoardSize} by ${currentBoardSize} game board`);
+  }
+
+  function openSettings(): void {
+    updateBoardSizeUI();
+    elements.settingsOverlayEl.classList.add('show');
+  }
+
+  function closeSettings(): void {
+    elements.settingsOverlayEl.classList.remove('show');
+  }
+
+  function changeBoardSize(): void {
+    const nextSize = Number(elements.boardSizeSelect.value);
+    if (!BOARD_SIZES.includes(nextSize as BoardSize)) {
+      updateBoardSizeUI();
+      return;
+    }
+    if (nextSize === currentBoardSize) return;
+    newGame(nextSize as BoardSize);
   }
 
   function updateHoverFromEvent(e: PointerEvent): void {
@@ -968,6 +1005,7 @@ export function createGameController(elements: GameControllerElements) {
   }
 
   const handleResize = (): void => resizeCanvases();
+  const playAgain = (): void => newGame();
 
   elements.nextCanvas.addEventListener('pointerdown', beginDrag);
   elements.boardCanvas.addEventListener('pointerdown', beginDrag);
@@ -977,7 +1015,10 @@ export function createGameController(elements: GameControllerElements) {
   window.addEventListener('resize', handleResize);
   window.addEventListener('orientationchange', handleResize);
   elements.newBtn.addEventListener('click', requestNewGame);
-  elements.againBtn.addEventListener('click', newGame);
+  elements.settingsBtn.addEventListener('click', openSettings);
+  elements.settingsCloseBtn.addEventListener('click', closeSettings);
+  elements.boardSizeSelect.addEventListener('change', changeBoardSize);
+  elements.againBtn.addEventListener('click', playAgain);
   elements.rerollBtn.addEventListener('click', rerollPiece);
   elements.clearBoardBtn.addEventListener('click', clearBoardAction);
 
@@ -1003,7 +1044,10 @@ export function createGameController(elements: GameControllerElements) {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
       elements.newBtn.removeEventListener('click', requestNewGame);
-      elements.againBtn.removeEventListener('click', newGame);
+      elements.settingsBtn.removeEventListener('click', openSettings);
+      elements.settingsCloseBtn.removeEventListener('click', closeSettings);
+      elements.boardSizeSelect.removeEventListener('change', changeBoardSize);
+      elements.againBtn.removeEventListener('click', playAgain);
       elements.rerollBtn.removeEventListener('click', rerollPiece);
       elements.clearBoardBtn.removeEventListener('click', clearBoardAction);
       elements.root.style.transform = '';
